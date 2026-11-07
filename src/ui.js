@@ -42,6 +42,11 @@ export class UI {
     this.slowBtn = btn('🐢', 'Slow motion (T)', () => game.toggleSlowmo());
     this.stiffBtn = btn('🦴', 'Joint stiffness', () => this.cycleStiffness());
     this.standBtn = btn('🧍', 'Mannequin stand on/off', () => this.toggleStand());
+    this.talkBtn = btn('💬', 'Mannequin chatter on/off', () => {
+      game.life.talk = !game.life.talk;
+      this.flashWord(game.life.talk ? 'Chatter on' : 'Chatter off', true);
+      this.update();
+    });
     this.soundBtn = btn('🔊', 'Sound on/off', () => {
       game.sfx.setEnabled(!game.sfx.enabled);
       this.update();
@@ -105,7 +110,7 @@ export class UI {
       'help hidden',
       `<div class="card">
         <h2>Anger Issues</h2>
-        <p>Vent on the mannequin. Wreck it, then rebuild it any way you like. Nothing to unlock, no timer, no fail state.</p>
+        <p>Vent on the mannequin. It'll complain, flinch and cower, but it can take it. Wreck it, then rebuild it any way you like. Nothing to unlock, no timer, no fail state.</p>
         <ul>
           <li><b>Pick a tool</b> from the toolbox at the bottom and use it on the mannequin.</li>
           <li><b>Grab</b> (✋, or hold <kbd>Shift</kbd> with any tool) drags and flings pieces.</li>
@@ -210,6 +215,7 @@ export class UI {
     this.skinBtn.innerHTML = `${skin.icon} ${skin.name} ▾`;
     this.slowBtn.classList.toggle('on', game.timeScale < 1);
     this.soundBtn.textContent = game.sfx.enabled ? '🔊' : '🔇';
+    this.talkBtn.classList.toggle('on', !game.life.talk);
     this.stiffBtn.title = `Joints: ${STIFFNESS[game.joints.stiffnessId].label} (click to change)`;
     this.stiffBtn.classList.toggle('on', game.joints.stiffnessId !== 'stiff');
     this.standBtn.classList.toggle('on', !game.mannequin.useStand);

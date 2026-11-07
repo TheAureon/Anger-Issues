@@ -51,6 +51,7 @@ export const SKINS = {
     body: () => mat(0xd9a066, { roughness: 0.75 }),
     joint: mat(0x8a5a2b),
     face: mat(0x5b3a1c),
+    sclera: mat(0xf5efe3),
     chips: [0xd9a066, 0xc48a4c, 0xe8bd85],
   },
   crash: {
@@ -59,6 +60,7 @@ export const SKINS = {
     body: () => mat(0xf2c12e, { roughness: 0.55 }),
     joint: mat(0x222222),
     face: mat(0x111111),
+    sclera: mat(0xffffff),
     chips: [0xf2c12e, 0x222222, 0xffffff],
   },
   robot: {
@@ -67,6 +69,7 @@ export const SKINS = {
     body: () => mat(0xa9b4bf, { roughness: 0.35, metalness: 0.75 }),
     joint: mat(0x3b4148, { metalness: 0.6, roughness: 0.4 }),
     face: mat(0xff3b3b, { emissive: 0xff2020, emissiveIntensity: 1.5 }),
+    sclera: mat(0x151515, { roughness: 0.2, metalness: 0.5 }),
     chips: [0xa9b4bf, 0xffd23f, 0x3b4148],
   },
   clay: {
@@ -75,6 +78,7 @@ export const SKINS = {
     body: (i) => mat(CLAY[i % CLAY.length], { roughness: 1 }),
     joint: mat(0xffffff, { roughness: 1 }),
     face: mat(0x333333),
+    sclera: mat(0xffffff, { roughness: 1 }),
     chips: CLAY,
   },
   neon: {
@@ -83,6 +87,7 @@ export const SKINS = {
     body: () => mat(0x1c1c2e, { roughness: 0.5 }),
     joint: mat(0x00e5ff, { emissive: 0x00e5ff, emissiveIntensity: 1.2 }),
     face: mat(0xff4fd8, { emissive: 0xff4fd8, emissiveIntensity: 1.5 }),
+    sclera: mat(0x0d0d1a),
     chips: [0x00e5ff, 0xff4fd8, 0x1c1c2e],
   },
 };
@@ -138,21 +143,26 @@ function makePartMesh(name, def, skin, index) {
     neck.userData.role = 'joint';
     neck.position.set(0, -0.1, 0);
     g.add(neck);
-    // A face so you can tell when the head is on backwards.
-    for (const x of [-0.04, 0.04]) {
-      const eye = mesh(geo('eye', () => new THREE.BoxGeometry(0.028, 0.034, 0.02)), skin.face, { cast: false });
-      eye.userData.role = 'face';
-      eye.position.set(x, 0.025, 0.105);
-      g.add(eye);
+    // An expressive face (animated by life.js). Also shows when the head is on backwards.
+    const face = (name, geom, material, pos, role = 'face') => {
+      const m = mesh(geom, material, { cast: false });
+      m.userData.role = role;
+      m.userData.facePart = name;
+      m.position.set(...pos);
+      m.userData.base = m.position.clone();
+      g.add(m);
+      return m;
+    };
+    for (const [s, x] of [['L', 0.046], ['R', -0.046]]) {
+      face('eye' + s, geo('sclera', () => new THREE.BoxGeometry(0.046, 0.056, 0.014)), skin.sclera, [x, 0.024, 0.101], 'sclera');
+      face('pupil' + s, geo('pupil', () => new THREE.BoxGeometry(0.022, 0.028, 0.01)), skin.face, [x, 0.024, 0.11]);
+      face('brow' + s, geo('brow', () => new THREE.BoxGeometry(0.046, 0.012, 0.012)), skin.face, [x, 0.07, 0.098]);
+      face('mouth' + s, geo('mouthHalf' + s, () => new THREE.BoxGeometry(0.036, 0.013, 0.02).translate(x > 0 ? 0.018 : -0.018, 0, 0)), skin.face, [0, -0.058, 0.106]);
     }
     const nose = mesh(geo('nose', () => new THREE.ConeGeometry(0.018, 0.05, 4).rotateX(Math.PI / 2)), skin.body(index));
     nose.userData.role = 'body';
-    nose.position.set(0, -0.01, 0.12);
+    nose.position.set(0, -0.012, 0.12);
     g.add(nose);
-    const mouth = mesh(geo('mouth', () => new THREE.BoxGeometry(0.06, 0.012, 0.02)), skin.face, { cast: false });
-    mouth.userData.role = 'face';
-    mouth.position.set(0, -0.05, 0.1);
-    g.add(mouth);
   }
   if (def.shape === 'chest') {
     // Little "belly button" stud on the front to show orientation.
@@ -278,6 +288,7 @@ export class Mannequin {
       });
     }
     this.byName = byName;
+    this.game.life?.onBuild();
   }
 
   clear() {
@@ -303,6 +314,7 @@ export class Mannequin {
         if (role === 'body') o.material = skin.body(e.skinIndex);
         else if (role === 'joint') o.material = skin.joint;
         else if (role === 'face') o.material = skin.face;
+        else if (role === 'sclera') o.material = skin.sclera;
       });
     }
   }
@@ -357,6 +369,7 @@ export class Mannequin {
       this.game.ui?.flashWord?.(['SNAP!', 'POP!', 'CRACK!', 'CLACK!'][(Math.random() * 4) | 0]);
     }
     this.game.stats.severed++;
+    this.game.life?.onSever(j, quiet);
     return true;
   }
 
@@ -388,6 +401,7 @@ export class Mannequin {
     const j = this.nearestJoint(e, point);
     if (!j) return false;
     j.damage += amount;
+    this.game.life?.onHurt(e, amount, point);
     if (j.damage >= j.strength) return this.sever(j);
     return false;
   }
@@ -423,21 +437,46 @@ export class Mannequin {
       e.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
       e.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
     }
-    joints.create({
+    const anchorA = toLocal(c.to.body, c.point);
+    const proper = this.properJoint(c, anchorA);
+    const j = joints.create({
       a: c.to,
       b: c.from,
-      anchorA: toLocal(c.to.body, c.point),
+      anchorA,
       anchorB: c.socket,
       kind: 'body',
-      strength: 1,
-      name: 'custom',
+      strength: proper ? proper[4] : 1,
+      name: proper ? proper[0] : 'custom',
     });
+    // Put back where it belongs: it becomes the original joint again and
+    // relaxes into its natural pose (so it can move like it used to).
+    if (proper) j.rest.identity();
+    j.base = j.rest.clone();
     const i = c.from.sockets.indexOf(c.socket);
     if (i >= 0) c.from.sockets.splice(i, 1);
     fx.burst(c.point, { count: 10, colors: [0xffffff, 0xfff1a8], speed: 1.5, size: 0.025, life: 0.6, gravity: 0 });
     sfx.clank();
     this.game.stats.attached++;
+    this.game.life?.onAttach(c, !!proper, j);
     return true;
+  }
+
+  /** If an attach recreates an original joint (right parts, right spot, upright-ish), return its def. */
+  properJoint(c, anchorA) {
+    for (const d of J) {
+      const [name, parent, child, w] = d;
+      if (c.to.partName !== parent || c.from.partName !== child) continue;
+      if ([...this.game.joints.list].some((j) => j.name === name)) continue;
+      const pd = P[parent];
+      const local = new THREE.Vector3(w[0] - pd.pos[0], w[1] - pd.pos[1], w[2] - pd.pos[2]);
+      if (local.distanceTo(anchorA) > 0.09) continue;
+      const ra = c.to.body.rotation();
+      const rb = c.from.body.rotation();
+      const rel = new THREE.Quaternion(ra.x, ra.y, ra.z, ra.w).invert().multiply(new THREE.Quaternion(rb.x, rb.y, rb.z, rb.w));
+      if (2 * Math.acos(Math.min(1, Math.abs(rel.w))) > 0.9) continue; // e.g. head on backwards
+      return d;
+    }
+    return null;
   }
 
   /** Per physics step: rescue pieces that fell out of the world. */

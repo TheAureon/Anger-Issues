@@ -164,6 +164,7 @@ export function bladeTools(game) {
 
 export function makeGuillotine(game, at) {
   const g = gadget(game, { lifetime: 9 });
+  g.threat = { kind: 'guillotine', pos: at.clone().setY(1) };
   const right = camRight(game);
   const normal = new THREE.Vector3().crossVectors(right, UP).normalize();
   const q = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(right, UP, normal));

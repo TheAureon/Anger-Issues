@@ -166,6 +166,7 @@ export function bluntTools(game) {
         restitution: 0.05,
         friction: 0.9,
         events: RAPIER.ActiveEvents.CONTACT_FORCE_EVENTS,
+        data: { threat: 'anvil' },
       });
       e.disposeMesh = true;
       game.sfx.whistle();

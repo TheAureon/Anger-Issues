@@ -97,6 +97,7 @@ export function explosiveTools(game) {
         pos: at,
         quat: q,
         lifetime: 8,
+        data: { threat: 'dynamite' },
       });
       e.disposeMesh = true;
       if (hit?.entity?.alive && hit.entity.kind !== 'static') {
@@ -134,6 +135,7 @@ export function explosiveTools(game) {
         meshObj: bombMesh(),
         mass: 7,
         pos,
+        data: { threat: 'bomb' },
         vel: new THREE.Vector3(0, -1, 0),
         angvel: new THREE.Vector3(Math.random() * 4, 0, Math.random() * 4),
         lifetime: 8,

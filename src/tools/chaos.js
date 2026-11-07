@@ -100,6 +100,7 @@ export function chaosTools(game) {
       const at = hit ? hit.point.clone().addScaledVector(hit.normal, 0.35) : aimPoint(p, null, 4);
       at.y = Math.max(at.y, 0.3);
       const g = gadget(game, { lifetime: 9 });
+      g.threat = { kind: 'magnet', pos: at };
       const m = g.show(magnetMesh());
       m.position.copy(at);
       m.lookAt(game.camera.position.x, at.y, game.camera.position.z);
@@ -217,6 +218,7 @@ export function chaosTools(game) {
     down(p, hit) {
       const c = placePoint(game, p, hit);
       const g = gadget(game, { lifetime: 8 });
+      g.threat = { kind: 'tornado', pos: c };
       const wander = new THREE.Vector3((Math.random() - 0.5) * 0.6, 0, (Math.random() - 0.5) * 0.6);
       const loop = game.sfx.loop('wind');
       g.loops.push(loop);
@@ -281,6 +283,7 @@ export function chaosTools(game) {
         pos,
         quat: q,
         lifetime: 6,
+        data: { threat: 'rocket' },
       });
       e.disposeMesh = true;
       if (hit.entity.alive) game.joints.fixedNow(hit.entity, e, hit.point, { kind: 'glue', breakDist: 0.3, strength: 99 });

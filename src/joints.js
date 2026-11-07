@@ -85,6 +85,7 @@ export class Joints {
       hold: hold && type !== 'fixed',
       holdMul,
       rest,
+      base: rest.clone(), // rest pose before any life.js animation offsets
       kind,
       strength,
       damage: 0,

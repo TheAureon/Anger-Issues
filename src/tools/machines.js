@@ -16,6 +16,7 @@ function basis(right) {
 
 export function makePress(game, at, { cycle = false, room = false, size = 0.55, color = 0xf2b632 } = {}) {
   const g = gadget(game, { room });
+  g.threat = { kind: room ? 'crusher' : 'press', pos: at.clone().setY(1) };
   const top = 3.3;
   const bottom = 0.14;
   const half = size;
@@ -98,6 +99,7 @@ export function makePress(game, at, { cycle = false, room = false, size = 0.55, 
 
 export function makeChipper(game, at, right, { room = false, look = 'chipper' } = {}) {
   const g = gadget(game, { room });
+  g.threat = { kind: look === 'blender' ? 'blender' : 'chipper', pos: at.clone().setY(0.6) };
   const q = basis(right);
   const center = at.clone().setY(0);
   const W = 0.55;
@@ -195,6 +197,7 @@ export function makeChipper(game, at, right, { room = false, look = 'chipper' } 
 
 export function makeSpinner(game, at, { room = false, height = null, lifetime = 14, speed = 16, radius = 0.75, look = 'blades' } = {}) {
   const g = gadget(game, { room, lifetime });
+  if (look !== 'fan') g.threat = { kind: 'blades', pos: at.clone().setY(height ?? THREE.MathUtils.clamp(at.y, 0.35, 1.6)) };
   const h = height ?? THREE.MathUtils.clamp(at.y, 0.35, 1.6);
   const c = at.clone().setY(h);
   const steel = mat(0xdfe6ee, { metalness: 0.9, roughness: 0.2 });

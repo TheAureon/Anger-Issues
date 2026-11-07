@@ -3,6 +3,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { Physics, RAPIER, bodyPos } from './physics.js';
 import { Joints } from './joints.js';
 import { Mannequin } from './mannequin.js';
+import { Life } from './life.js';
 import { Fx } from './fx.js';
 import { Sfx } from './audio.js';
 import { createTools } from './tools/index.js';
@@ -77,6 +78,7 @@ export class Game {
     this.physics.removeHooks.push((e) => this.joints.removeForEntity(e));
 
     this.mannequin = new Mannequin(this);
+    this.life = new Life(this);
     this.tools = createTools(this);
     this.tool = this.tools[0];
     this.activeTool = null;
@@ -109,6 +111,7 @@ export class Game {
     this.hemi.groundColor.set(def.hemi?.[1] ?? 0x4a4250);
     this.sun.intensity = def.sun ?? 2.2;
     if (this.mannequin.parts.length) this.mannequin.reset();
+    this.life?.onRoom(id);
     this.ui?.update();
   }
 
@@ -264,6 +267,7 @@ export class Game {
       if (damage && e.kind === 'prop') for (const j of [...e.joints]) if (j.kind === 'glue' && f > 0.4) this.mannequin.sever(j);
     }
     if (fx) this.fx.explosion(p, radius);
+    this.life?.onBoom(p, radius);
     if (sound) this.sfx.boom(radius / 3);
     this.stats.booms++;
   }
@@ -382,6 +386,7 @@ export class Game {
     if (!this.hoverPending || !this.pointer) return;
     this.hoverPending = false;
     const hit = this.pick(this.pointer);
+    this.hoverHit = hit ? { point: hit.point, entity: hit.entity, time: this.time } : null;
     const canvas = this.renderer.domElement;
     let cursor = 'default';
     if (hit?.entity?.body.isDynamic()) cursor = this.tool.id === 'hand' ? 'grab' : 'crosshair';
@@ -444,7 +449,10 @@ export class Game {
 
   onImpact(e, other, f) {
     if (!e || e.kind !== 'part' || !e.alive) return;
-    if (f > 1500) this.sfx.knock();
+    if (f > 1500) {
+      this.sfx.knock();
+      this.life?.onBump(e, f);
+    }
     const T = 4000;
     if (f < T || !other) return;
     // Heavy hits break the joint closest to whatever hit us.
@@ -472,6 +480,7 @@ export class Game {
         this.removeProp(p);
       }
     }
+    this.life.fixed(dt);
     this.joints.fixed(dt);
     this.physics.step();
     this.handleEvents();
@@ -497,6 +506,7 @@ export class Game {
     this.room?.update?.(vdt);
     for (const p of this.props) p.update?.(vdt);
     this.fx.update(vdt);
+    this.life.update(vdt);
     this.updateHover();
     this.controls.update();
     this.fx.applyShake(this.camera);

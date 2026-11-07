@@ -168,6 +168,7 @@ export const ROOMS = {
         colliders: [RAPIER.ColliderDesc.ball(0.42).setMass(400).setRestitution(0.2)],
         mesh: mesh(new THREE.IcosahedronGeometry(0.42, 1), mat(0x2a2d33, { metalness: 0.6, roughness: 0.4 })),
         kind: 'prop',
+        data: { threat: 'wreck' },
       });
       r.entities.push(ball);
       game.physics.world.createImpulseJoint(RAPIER.JointData.spherical({ x: 0, y: 0, z: 0 }, { x: 0, y: 3.9, z: 0 }), anchor.body, ball.body, true);

@@ -109,6 +109,7 @@ export function rangedTools(game) {
         r: 0.13,
         mass: 30,
         pos,
+        data: { threat: 'cannon' },
         vel: dir.clone().multiplyScalar(40),
         material: mat(0x1d1f22, { metalness: 0.7, roughness: 0.4 }),
         ccd: true,

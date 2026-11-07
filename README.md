@@ -47,6 +47,15 @@ heavy impacts, accumulated damage, blades, or being stretched apart. Every joint
 that pulls it back to its rest pose, so the figure behaves like a stiff wooden mannequin. The 🦴 button
 cycles Stiff → Loose → Ragdoll. The 🧍 button takes it off its stand.
 
+**It's alive (sort of):** the mannequin breathes, blinks, sways, and follows your cursor with its eyes
+and head. Its face shifts between calm, pained, scared, happy, dizzy and bored. It flinches when hit,
+cowers from incoming anvils, cannonballs, presses and blades, kicks and flails when you pick it up,
+and waves when you put it back together. It talks too, in speech bubbles with a gibberish synth voice:
+it reacts to hits, lost limbs, explosions and threats, complains when you reattach things wrong, and
+teases you when you go quiet. A cut-off head keeps talking ("Put me back!"), and loose pieces hop back
+toward the body. Put a piece back where it belongs and it moves like the original again. The 💬 button
+turns the chatter off.
+
 **27 tools in 7 categories:**
 
 | Category | Tools |
@@ -76,6 +85,7 @@ src/
   physics.js       Rapier world wrapper: entities (body + colliders + mesh), raycasts
   joints.js        all joints: break-by-stretch, pose-holding muscles, fixed "stick" joints
   mannequin.js     body layout, skins, sever / damage / reattach logic
+  life.js          personality: animated joint poses, face, moods, speech, threat sensing
   rooms.js         rooms and their hazards
   fx.js            instanced particles, flashes, camera shake, 2D overlay trails
   audio.js         WebAudio synth sound effects (no audio files)
