@@ -1,0 +1,477 @@
+import * as THREE from 'three';
+import { RAPIER, toLocal, toWorld, bodyPos } from './physics.js';
+import { mat, mesh, geo } from './materials.js';
+
+/* ------------------------------------------------------------------ */
+/* Body layout (metres, standing on y = 0, facing +z)                  */
+/* ------------------------------------------------------------------ */
+
+const P = {
+  pelvis: { shape: 'pelvis', half: [0.16, 0.09, 0.1], pos: [0, 1.0, 0], mass: 8 },
+  chest: { shape: 'chest', half: [0.19, 0.21, 0.11], pos: [0, 1.33, 0], mass: 14 },
+  head: { shape: 'head', r: 0.12, pos: [0, 1.71, 0], mass: 4 },
+};
+for (const [s, x] of [['L', 1], ['R', -1]]) {
+  P['upperArm' + s] = { shape: 'capsule', half: 0.09, r: 0.055, pos: [0.265 * x, 1.355, 0], mass: 2.2 };
+  P['forearm' + s] = { shape: 'capsule', half: 0.085, r: 0.048, pos: [0.265 * x, 1.075, 0], mass: 1.6 };
+  P['hand' + s] = { shape: 'hand', half: [0.035, 0.06, 0.024], pos: [0.265 * x, 0.88, 0], mass: 0.8 };
+  P['thigh' + s] = { shape: 'capsule', half: 0.14, r: 0.072, pos: [0.095 * x, 0.72, 0], mass: 4.5 };
+  P['shin' + s] = { shape: 'capsule', half: 0.15, r: 0.058, pos: [0.095 * x, 0.29, 0], mass: 3 };
+  P['foot' + s] = { shape: 'foot', half: [0.045, 0.035, 0.11], pos: [0.095 * x, 0.036, 0.04], mass: 1.2 };
+}
+export const PARTS = P;
+
+// [name, parent, child, world anchor, strength, joint-ball radius]
+const J = [
+  ['neck', 'chest', 'head', [0, 1.575, 0], 1.0, 0.045],
+  ['waist', 'pelvis', 'chest', [0, 1.11, 0], 1.4, 0.075],
+];
+for (const [s, x] of [['L', 1], ['R', -1]]) {
+  J.push(
+    ['shoulder' + s, 'chest', 'upperArm' + s, [0.265 * x, 1.47, 0], 1.0, 0.06],
+    ['elbow' + s, 'upperArm' + s, 'forearm' + s, [0.265 * x, 1.21, 0], 0.9, 0.05],
+    ['wrist' + s, 'forearm' + s, 'hand' + s, [0.265 * x, 0.945, 0], 0.8, 0.04],
+    ['hip' + s, 'pelvis', 'thigh' + s, [0.095 * x, 0.92, 0], 1.2, 0.07],
+    ['knee' + s, 'thigh' + s, 'shin' + s, [0.095 * x, 0.505, 0], 1.0, 0.058],
+    ['ankle' + s, 'shin' + s, 'foot' + s, [0.095 * x, 0.08, 0], 0.8, 0.045],
+  );
+}
+export const JOINT_DEFS = J;
+
+/* ------------------------------------------------------------------ */
+/* Skins                                                               */
+/* ------------------------------------------------------------------ */
+
+const CLAY = [0xf4a6a6, 0xa6d8f4, 0xb8f4a6, 0xf4e3a6, 0xd1a6f4, 0xf4c6a6];
+
+export const SKINS = {
+  wood: {
+    name: 'Wooden',
+    icon: '🪵',
+    body: () => mat(0xd9a066, { roughness: 0.75 }),
+    joint: mat(0x8a5a2b),
+    face: mat(0x5b3a1c),
+    chips: [0xd9a066, 0xc48a4c, 0xe8bd85],
+  },
+  crash: {
+    name: 'Crash dummy',
+    icon: '🚗',
+    body: () => mat(0xf2c12e, { roughness: 0.55 }),
+    joint: mat(0x222222),
+    face: mat(0x111111),
+    chips: [0xf2c12e, 0x222222, 0xffffff],
+  },
+  robot: {
+    name: 'Robot',
+    icon: '🤖',
+    body: () => mat(0xa9b4bf, { roughness: 0.35, metalness: 0.75 }),
+    joint: mat(0x3b4148, { metalness: 0.6, roughness: 0.4 }),
+    face: mat(0xff3b3b, { emissive: 0xff2020, emissiveIntensity: 1.5 }),
+    chips: [0xa9b4bf, 0xffd23f, 0x3b4148],
+  },
+  clay: {
+    name: 'Clay',
+    icon: '🎨',
+    body: (i) => mat(CLAY[i % CLAY.length], { roughness: 1 }),
+    joint: mat(0xffffff, { roughness: 1 }),
+    face: mat(0x333333),
+    chips: CLAY,
+  },
+  neon: {
+    name: 'Neon',
+    icon: '💡',
+    body: () => mat(0x1c1c2e, { roughness: 0.5 }),
+    joint: mat(0x00e5ff, { emissive: 0x00e5ff, emissiveIntensity: 1.2 }),
+    face: mat(0xff4fd8, { emissive: 0xff4fd8, emissiveIntensity: 1.5 }),
+    chips: [0x00e5ff, 0xff4fd8, 0x1c1c2e],
+  },
+};
+
+/* ------------------------------------------------------------------ */
+/* Meshes                                                              */
+/* ------------------------------------------------------------------ */
+
+function partGeometry(name, d) {
+  switch (d.shape) {
+    case 'chest':
+      return geo('chest', () => {
+        const g = new THREE.CylinderGeometry(0.205, 0.165, 0.42, 6);
+        g.scale(1, 1, 0.56);
+        g.rotateY(Math.PI / 6);
+        return g;
+      });
+    case 'pelvis':
+      return geo('pelvis', () => {
+        const g = new THREE.CylinderGeometry(0.155, 0.13, 0.18, 6);
+        g.scale(1, 1, 0.68);
+        g.rotateY(Math.PI / 6);
+        return g;
+      });
+    case 'head':
+      return geo('head', () => {
+        const g = new THREE.IcosahedronGeometry(d.r, 1);
+        g.scale(0.9, 1.08, 0.96);
+        return g;
+      });
+    case 'capsule':
+      return geo(`cap${d.half}_${d.r}`, () => new THREE.CapsuleGeometry(d.r, d.half * 2, 2, 7));
+    default:
+      return geo(`box${d.half.join('_')}`, () => new THREE.BoxGeometry(d.half[0] * 2, d.half[1] * 2, d.half[2] * 2));
+  }
+}
+
+function makePartMesh(name, def, skin, index) {
+  const g = new THREE.Group();
+  const body = mesh(partGeometry(name, def), skin.body(index));
+  body.userData.role = 'body';
+  g.add(body);
+  // Joint balls on the child side, like a real artist's mannequin.
+  for (const [, , child, w, , r] of J) {
+    if (child !== name) continue;
+    const ball = mesh(geo(`ball${r}`, () => new THREE.IcosahedronGeometry(r, 1)), skin.joint);
+    ball.userData.role = 'joint';
+    ball.position.set(w[0] - def.pos[0], w[1] - def.pos[1], w[2] - def.pos[2]);
+    g.add(ball);
+  }
+  if (def.shape === 'head') {
+    const neck = mesh(geo('neck', () => new THREE.CylinderGeometry(0.035, 0.045, 0.1, 6)), skin.joint);
+    neck.userData.role = 'joint';
+    neck.position.set(0, -0.1, 0);
+    g.add(neck);
+    // A face so you can tell when the head is on backwards.
+    for (const x of [-0.04, 0.04]) {
+      const eye = mesh(geo('eye', () => new THREE.BoxGeometry(0.028, 0.034, 0.02)), skin.face, { cast: false });
+      eye.userData.role = 'face';
+      eye.position.set(x, 0.025, 0.105);
+      g.add(eye);
+    }
+    const nose = mesh(geo('nose', () => new THREE.ConeGeometry(0.018, 0.05, 4).rotateX(Math.PI / 2)), skin.body(index));
+    nose.userData.role = 'body';
+    nose.position.set(0, -0.01, 0.12);
+    g.add(nose);
+    const mouth = mesh(geo('mouth', () => new THREE.BoxGeometry(0.06, 0.012, 0.02)), skin.face, { cast: false });
+    mouth.userData.role = 'face';
+    mouth.position.set(0, -0.05, 0.1);
+    g.add(mouth);
+  }
+  if (def.shape === 'chest') {
+    // Little "belly button" stud on the front to show orientation.
+    const stud = mesh(geo('stud', () => new THREE.IcosahedronGeometry(0.025, 0)), skin.joint);
+    stud.userData.role = 'joint';
+    stud.position.set(0, -0.05, 0.1);
+    g.add(stud);
+  }
+  return g;
+}
+
+function colliderFor(def) {
+  switch (def.shape) {
+    case 'head':
+      return RAPIER.ColliderDesc.ball(def.r);
+    case 'capsule':
+      return RAPIER.ColliderDesc.capsule(def.half, def.r);
+    default:
+      return RAPIER.ColliderDesc.cuboid(...def.half);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Mannequin                                                           */
+/* ------------------------------------------------------------------ */
+
+// Collision groups: (membership << 16) | filter.
+export const GROUP_PART = 0x0001ffff;
+// A loose piece being carried passes through the rest of the body.
+export const GROUP_GHOST = 0x0002fffe;
+
+/* ------------------------------------------------------------------ */
+/* ------------------------------------------------------------------ */
+
+export class Mannequin {
+  constructor(game) {
+    this.game = game;
+    this.parts = [];
+    this.skinId = 'wood';
+    this.useStand = true;
+    this.stand = null;
+    this.standMesh = this.makeStandMesh();
+    game.scene.add(this.standMesh);
+    this.steps = 0;
+  }
+
+  get skin() {
+    return SKINS[this.skinId];
+  }
+
+  makeStandMesh() {
+    const g = new THREE.Group();
+    const m = mat(0x2b2b33, { metalness: 0.5, roughness: 0.4 });
+    const base = mesh(new THREE.CylinderGeometry(0.28, 0.32, 0.03, 8), m);
+    base.position.y = 0.015;
+    const rod = mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.98, 6), m);
+    rod.position.y = 0.5;
+    g.add(base, rod);
+    return g;
+  }
+
+  build() {
+    const { physics, joints } = this.game;
+    const skin = this.skin;
+    this.standMesh.visible = this.useStand;
+    if (this.useStand) {
+      this.stand = physics.create({
+        body: RAPIER.RigidBodyDesc.fixed().setTranslation(0, 1.0, 0),
+        kind: 'stand',
+      });
+    }
+    const byName = {};
+    let i = 0;
+    for (const [name, def] of Object.entries(P)) {
+      const idx = i++;
+      const bd = RAPIER.RigidBodyDesc.dynamic()
+        .setTranslation(...def.pos)
+        .setLinearDamping(0.05)
+        .setAngularDamping(0.9)
+        .setCcdEnabled(true);
+      const cd = colliderFor(def)
+        .setMass(def.mass)
+        .setFriction(0.8)
+        .setRestitution(0.05)
+        .setActiveEvents(RAPIER.ActiveEvents.CONTACT_FORCE_EVENTS)
+        .setContactForceEventThreshold(400)
+        .setCollisionGroups(GROUP_PART);
+      const e = physics.create({
+        body: bd,
+        colliders: [cd],
+        mesh: makePartMesh(name, def, skin, idx),
+        kind: 'part',
+        data: { partName: name, sockets: [], skinIndex: idx },
+      });
+      byName[name] = e;
+      this.parts.push(e);
+    }
+    for (const [name, an, bn, w, strength] of J) {
+      const a = byName[an];
+      const b = byName[bn];
+      const wp = new THREE.Vector3(...w);
+      joints.create({
+        a,
+        b,
+        anchorA: toLocal(a.body, wp),
+        anchorB: toLocal(b.body, wp),
+        kind: 'body',
+        strength,
+        name,
+      });
+    }
+    if (this.stand) {
+      joints.create({
+        a: this.stand,
+        b: byName.pelvis,
+        anchorA: { x: 0, y: 0, z: 0 },
+        anchorB: { x: 0, y: 0, z: 0 },
+        kind: 'stand',
+        strength: 3,
+        holdMul: 1.6,
+        breakDist: 0.25,
+        name: 'stand',
+      });
+    }
+    this.byName = byName;
+  }
+
+  clear() {
+    const { physics } = this.game;
+    for (const e of this.parts) physics.remove(e);
+    this.parts = [];
+    if (this.stand) physics.remove(this.stand);
+    this.stand = null;
+  }
+
+  reset() {
+    this.clear();
+    this.build();
+  }
+
+  setSkin(id) {
+    this.skinId = id;
+    const skin = this.skin;
+    for (const e of this.parts) {
+      e.mesh.traverse((o) => {
+        if (!o.isMesh) return;
+        const role = o.userData.role;
+        if (role === 'body') o.material = skin.body(e.skinIndex);
+        else if (role === 'joint') o.material = skin.joint;
+        else if (role === 'face') o.material = skin.face;
+      });
+    }
+  }
+
+  /** All entities connected to `start` through joints. anchored = touches a fixed body. */
+  graph(start) {
+    const set = new Set([start]);
+    const stack = [start];
+    let anchored = false;
+    while (stack.length) {
+      const e = stack.pop();
+      for (const j of e.joints) {
+        const o = j.a === e ? j.b : j.a;
+        if (!o.body.isDynamic()) {
+          anchored = true;
+          continue;
+        }
+        if (!set.has(o)) {
+          set.add(o);
+          stack.push(o);
+        }
+      }
+    }
+    return { set, anchored };
+  }
+
+  /** Breaks a joint, leaving sockets on both pieces so they can be reattached. */
+  sever(j, { quiet = false } = {}) {
+    if (!j || !j.alive) return false;
+    const { joints, fx, sfx } = this.game;
+    const w = joints.worldAnchor(j, 'a');
+    joints.remove(j);
+    if (j.kind === 'body') {
+      for (const [e, s] of [[j.a, j.anchorA], [j.b, j.anchorB]]) {
+        if (e.kind === 'part') {
+          e.sockets.push(s.clone());
+          if (e.sockets.length > 6) e.sockets.shift();
+        }
+      }
+    }
+    // Pop the pieces apart a little.
+    const A = j.a.body;
+    const B = j.b.body;
+    if (A.isDynamic() && B.isDynamic()) {
+      const dir = bodyPos(B).sub(bodyPos(A)).normalize().multiplyScalar(1.2);
+      B.applyImpulse(dir.clone().multiplyScalar(B.mass()), true);
+      A.applyImpulse(dir.multiplyScalar(-A.mass() * 0.5), true);
+    }
+    if (!quiet) {
+      fx.burst(w, { count: 14, colors: this.skin.chips, speed: 3, size: 0.035, life: 1.4 });
+      sfx.crack();
+      this.game.ui?.flashWord?.(['SNAP!', 'POP!', 'CRACK!', 'CLACK!'][(Math.random() * 4) | 0]);
+    }
+    this.game.stats.severed++;
+    return true;
+  }
+
+  /** Sever the joint on `e` nearest to `point` (optionally only within maxDist). */
+  severNearest(e, point, maxDist = Infinity) {
+    const j = this.nearestJoint(e, point, maxDist);
+    return j ? this.sever(j) : false;
+  }
+
+  nearestJoint(e, point, maxDist = Infinity) {
+    if (!e) return null;
+    let best = null;
+    let bd = maxDist;
+    const tmp = new THREE.Vector3();
+    for (const j of e.joints) {
+      toWorld(e.body, j.a === e ? j.anchorA : j.anchorB, tmp);
+      const d = tmp.distanceTo(point);
+      if (d < bd) {
+        bd = d;
+        best = j;
+      }
+    }
+    return best;
+  }
+
+  /** Accumulate damage on the nearest joint; break it when it runs out of strength. */
+  damage(e, amount, point) {
+    if (!e || amount <= 0 || !e.joints.length) return false;
+    const j = this.nearestJoint(e, point);
+    if (!j) return false;
+    j.damage += amount;
+    if (j.damage >= j.strength) return this.sever(j);
+    return false;
+  }
+
+  /** Best place to stick a held loose piece: one of its free sockets near another body piece. */
+  findAttach(held) {
+    const { set } = this.graph(held);
+    let best = null;
+    const wp = new THREE.Vector3();
+    for (const e of set) {
+      if (e.kind !== 'part') continue;
+      for (const s of e.sockets) {
+        toWorld(e.body, s, wp);
+        const hit = this.game.physics.project(wp, (o) => o.kind === 'part' && !set.has(o));
+        if (!hit) continue;
+        const d = hit.inside ? 0 : wp.distanceTo(hit.point);
+        if (d < 0.2 && (!best || d < best.d)) {
+          best = { from: e, socket: s, wp: wp.clone(), to: hit.entity, point: hit.point, d, set };
+        }
+      }
+    }
+    return best;
+  }
+
+  attach(c) {
+    const { joints, fx, sfx } = this.game;
+    if (!c.from.alive || !c.to.alive) return false;
+    // Snap the whole loose component so the socket lands on the target point.
+    const delta = c.point.clone().sub(toWorld(c.from.body, c.socket));
+    for (const e of c.set) {
+      const t = e.body.translation();
+      e.body.setTranslation({ x: t.x + delta.x, y: t.y + delta.y, z: t.z + delta.z }, true);
+      e.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      e.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+    }
+    joints.create({
+      a: c.to,
+      b: c.from,
+      anchorA: toLocal(c.to.body, c.point),
+      anchorB: c.socket,
+      kind: 'body',
+      strength: 1,
+      name: 'custom',
+    });
+    const i = c.from.sockets.indexOf(c.socket);
+    if (i >= 0) c.from.sockets.splice(i, 1);
+    fx.burst(c.point, { count: 10, colors: [0xffffff, 0xfff1a8], speed: 1.5, size: 0.025, life: 0.6, gravity: 0 });
+    sfx.clank();
+    this.game.stats.attached++;
+    return true;
+  }
+
+  /** Per physics step: rescue pieces that fell out of the world. */
+  fixed() {
+    if (++this.steps % 20) return;
+    const seen = new Set();
+    for (const e of this.parts) {
+      if (seen.has(e)) continue;
+      const t = e.body.translation();
+      const lost = t.y < -12 || Math.abs(t.x) > 40 || Math.abs(t.z) > 40 || t.y > 60;
+      if (!lost) continue;
+      const { set } = this.graph(e);
+      for (const o of set) seen.add(o);
+      const delta = new THREE.Vector3(-t.x + (Math.random() - 0.5), 2.5 - t.y, -t.z + (Math.random() - 0.5));
+      for (const o of set) {
+        const p = o.body.translation();
+        o.body.setTranslation({ x: p.x + delta.x, y: p.y + delta.y, z: p.z + delta.z }, true);
+        o.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      }
+    }
+  }
+
+  /** Make a set of pieces pass through the rest of the mannequin (or solid again). */
+  setGhost(set, on) {
+    for (const e of set) {
+      if (e.kind !== 'part' || !e.alive) continue;
+      for (const c of e.colliders) c.setCollisionGroups(on ? GROUP_GHOST : GROUP_PART);
+    }
+  }
+
+  /** Count of intact default joints, for the HUD. */
+  intactCount() {
+    let n = 0;
+    for (const j of this.game.joints.list) if (j.kind === 'body') n++;
+    return n;
+  }
+}
