@@ -37,10 +37,17 @@ Open `index.html` at the repo root. It's the whole game in one self-contained fi
 | Look around | Drag, or arrow keys / WASD |
 | Zoom sights | Scroll |
 | Overview camera | <kbd>V</kbd> or the 🗺️ button |
+| Music on/off | <kbd>M</kbd> or the 🎵 button (🔊 mutes everything) |
 | Menu | <kbd>Esc</kbd> |
 
 You start in your king's POV, with the full board in the corner. Play against the computer (you're
 White) or hot-seat with two players.
+
+## Music
+
+The soundtrack is generated live in code (no audio files): a looping D-minor march. It's calm pads
+and bass on the menu, adds drums, an arpeggio and a melody once the battle starts, and gets tenser
+(faster hats, snare rolls, a low pulse) whenever your king is in an enemy gun's reach.
 
 ## Code
 
@@ -53,7 +60,8 @@ src/pieces.js     low-poly pieces and their guns
 src/world.js      board, plateau, trees, rocks, lights
 src/fx.js         tracers, muzzle flash, shattering pieces
 src/minimap.js    the 2D board in the corner
-src/audio.js      synthesized sounds
+src/audio.js      synthesized sound effects
+src/music.js      procedural soundtrack (WebAudio sequencer)
 ```
 
 ```bash

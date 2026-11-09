@@ -80,6 +80,7 @@ kbd {
   font-size: 18px;
   font-weight: 700;
 }
+#top-buttons button.off { opacity: 0.45; text-decoration: line-through; }
 #top-buttons button.on { border-color: var(--blue); box-shadow: 0 0 0 2px rgba(92, 200, 255, 0.35); }
 
 #status {

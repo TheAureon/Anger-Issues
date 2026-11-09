@@ -363,6 +363,7 @@ function refresh() {
   $('btn-view').classList.toggle('on', viewMode === 'over');
   drawMap();
   updateHover();
+  updateMood();
 }
 
 function drawMap() {
@@ -679,8 +680,8 @@ function startGame() {
   remembered.b = kingId('b');
   povId = null;
   viewMode = 'pov';
-  setPov(remembered.w);
   started = true;
+  setPov(remembered.w);
   $('menu').classList.add('hidden');
   $('over').classList.add('hidden');
   $('hud').classList.remove('hidden');
@@ -777,6 +778,8 @@ window.addEventListener('keydown', (e) => {
     setOverview(viewMode !== 'over');
   } else if (k === 'escape') {
     toggleMenu();
+  } else if (k === 'm') {
+    setMusic(!sfx.music.enabled);
   } else if (k === 'q' || k === 'e') {
     cyclePiece(k === 'e' ? 1 : -1);
   }
@@ -824,6 +827,39 @@ $('btn-menu').addEventListener('click', toggleMenu);
 $('btn-view').addEventListener('click', () => setOverview(viewMode !== 'over'));
 $('btn-help').addEventListener('click', () => $('help').classList.remove('hidden'));
 $('btn-help-close').addEventListener('click', () => $('help').classList.add('hidden'));
+function loadPref(key, fallback) {
+  try {
+    const v = localStorage.getItem(key);
+    return v == null ? fallback : v === '1';
+  } catch {
+    return fallback;
+  }
+}
+function savePref(key, on) {
+  try {
+    localStorage.setItem(key, on ? '1' : '0');
+  } catch {
+    /* storage unavailable: setting lasts for this visit only */
+  }
+}
+function setMusic(on) {
+  sfx.music.setEnabled(on);
+  $('btn-music').classList.toggle('off', !on);
+  $('btn-music').title = on ? 'Music on (M)' : 'Music off (M)';
+  savePref('gunmate-music', on);
+}
+setMusic(loadPref('gunmate-music', true));
+$('btn-music').addEventListener('click', () => setMusic(!sfx.music.enabled));
+// Music needs a user gesture before it can start.
+window.addEventListener('pointerdown', () => sfx.unlock(), { once: true });
+
+// Battle mood: tense when the side you're playing has its king in an enemy gun's reach.
+function updateMood() {
+  if (!started || !st || st.result) return sfx.music.setMood(0);
+  const k = R.findKing(st, viewerColor());
+  sfx.music.setMood(k >= 0 && R.attackedBy(st, k, R.other(viewerColor())) ? 2 : 1);
+}
+
 $('btn-sound').addEventListener('click', () => {
   sfx.setMuted(!sfx.muted);
   $('btn-sound').textContent = sfx.muted ? '🔇' : '🔊';
@@ -943,7 +979,7 @@ function frame() {
 }
 
 // Read-only hook for automated play-testing.
-window.__gunmate = { state: () => st, legal: () => (st ? R.legalActions(st) : []), busy: () => busy, cam: () => ({ pos: camera.position.toArray().map((v) => +v.toFixed(2)), povId, viewMode, yaw: +yaw.toFixed(2), pitch: +pitch.toFixed(2) }) };
+window.__gunmate = { state: () => st, legal: () => (st ? R.legalActions(st) : []), busy: () => busy, music: sfx.music, cam: () => ({ pos: camera.position.toArray().map((v) => +v.toFixed(2)), povId, viewMode, yaw: +yaw.toFixed(2), pitch: +pitch.toFixed(2) }) };
 
 // Show the board (slowly orbiting) behind the menu.
 st = R.newGame(R.CLASSIC);

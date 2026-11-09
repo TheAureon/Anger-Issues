@@ -1,4 +1,7 @@
 // Synthesised sounds (no audio files): gunshots per weapon, shatters, ricochets, moves.
+import { Music } from './music.js';
+
+export const music = new Music();
 let ctx = null;
 let master = null;
 let noiseBuf = null;
@@ -15,6 +18,7 @@ function ensure() {
     noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
     const d = noiseBuf.getChannelData(0);
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    music.attach(ctx, master, noiseBuf);
   }
   if (ctx.state === 'suspended') ctx.resume();
   return ctx;
