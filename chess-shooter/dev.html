@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#1b1a20" />
+    <meta name="description" content="Gunmate: chess, but every piece has a gun. Low-poly 3D, first-person from your pieces." />
+    <title>Gunmate</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>♞</text></svg>" />
+  </head>
+  <body>
+    <div id="app"></div>
+
+    <div id="hud" class="hidden">
+      <div id="topbar">
+        <div id="turn"><span id="turn-dot"></span><span id="turn-text">White to play</span></div>
+        <div id="mode-tag"></div>
+        <div id="top-buttons">
+          <button id="btn-view" title="Toggle overview camera (V)">🗺️</button>
+          <button id="btn-sound" title="Sound on/off">🔊</button>
+          <button id="btn-help" title="How to play">?</button>
+          <button id="btn-menu" title="Menu (Esc)">☰</button>
+        </div>
+      </div>
+      <div id="status"></div>
+      <div id="graves"><div id="grave-w"></div><div id="grave-b"></div></div>
+
+      <div id="corner">
+        <canvas id="minimap"></canvas>
+        <div id="card">
+          <div id="card-title"></div>
+          <div id="card-move"></div>
+          <div id="card-gun"></div>
+          <div id="card-count"></div>
+        </div>
+      </div>
+
+      <div id="tip" class="hidden"></div>
+      <div id="banner" class="hidden"></div>
+      <div id="hint">Drag to look · click a piece to see through it · click a square to move · click a red-marked enemy to shoot · scroll to zoom</div>
+    </div>
+
+    <div id="menu" class="overlay">
+      <div class="panel">
+        <h1>Gunmate</h1>
+        <p class="sub">Chess, but every piece is armed. You see the battle through their eyes.</p>
+        <div class="row-label">Mode</div>
+        <div class="choices" id="mode-choices">
+          <button class="choice selected" data-mode="classic">
+            <b>Classic</b>
+            <span>Kings are bulletproof. Siege the king: checkmate wins.</span>
+          </button>
+          <button class="choice" data-mode="mercizero">
+            <b>MerciZero</b>
+            <span>Kings can die. Shoot the enemy king to win. No check rules.</span>
+          </button>
+        </div>
+        <div class="row-label">Opponent</div>
+        <div class="choices" id="opp-choices">
+          <button class="choice selected" data-opp="ai"><b>Computer</b><span>You play White.</span></button>
+          <button class="choice" data-opp="local"><b>2 players</b><span>Hot-seat on one screen.</span></button>
+        </div>
+        <button id="btn-start" class="primary">Play</button>
+        <button id="btn-resume" class="secondary hidden">Resume</button>
+        <details>
+          <summary>Rules</summary>
+          <ul class="rules">
+            <li>Pieces move exactly like chess, but only onto <b>empty</b> squares.</li>
+            <li>Instead of capturing, you <b>shoot</b>. A kill doesn't move your piece: your rook can snipe and stay on its safe square.</li>
+            <li>Each turn: <b>move OR shoot</b>, never both.</li>
+            <li>Gun range: <b>pawn</b> = its two diagonal capture squares, <b>knight</b> = its L squares (the bullet flies straight, not in an L), <b>king</b> = the 8 squares around it.</li>
+            <li><b>Rook, bishop, queen</b> shoot along their lines but only half as far: 4 squares. The line must be clear.</li>
+            <li>You can <b>miss</b>. Long shots wobble. Bullets hit whatever is in their path first, even your own pieces, and can fly over short ones.</li>
+            <li>Pawns promote when they reach the far rank. Castling works as in chess.</li>
+            <li><b>Classic:</b> check means a king is in an enemy gun's reach. You can't leave your king in check. No legal action while in check = checkmate.</li>
+            <li><b>MerciZero:</b> anything goes. Shoot the king and win (shoot your own and lose).</li>
+          </ul>
+        </details>
+      </div>
+    </div>
+
+    <div id="help" class="overlay hidden">
+      <div class="panel">
+        <h2>How to play</h2>
+        <ul class="rules">
+          <li>You start looking through your <b>king</b>. The board in the corner shows everything.</li>
+          <li><b>Click one of your pieces</b> (in 3D or on the corner board) to jump into its point of view. <kbd>Q</kbd>/<kbd>E</kbd> cycle pieces.</li>
+          <li><b>Green dots</b>: squares it can move to. Click one to move.</li>
+          <li><b>Red rings and diamonds</b>: enemies in its gun range. Click to shoot. The hit chance is shown on hover. In first person you aim where you click: centre mass is safest.</li>
+          <li><b>Drag</b> (or arrow keys / WASD) to look around. <b>Scroll</b> to zoom your sights. <kbd>V</kbd> toggles an overview camera.</li>
+          <li>Red-tinted squares are the current piece's field of fire.</li>
+        </ul>
+        <button class="primary" id="btn-help-close">Got it</button>
+      </div>
+    </div>
+
+    <div id="promo" class="overlay hidden">
+      <div class="panel small">
+        <h2>Promote to</h2>
+        <div class="promo-row">
+          <button data-t="q">♛<span>Queen</span></button>
+          <button data-t="r">♜<span>Rook</span></button>
+          <button data-t="b">♝<span>Bishop</span></button>
+          <button data-t="n">♞<span>Knight</span></button>
+        </div>
+      </div>
+    </div>
+
+    <div id="over" class="overlay hidden">
+      <div class="panel small">
+        <h2 id="over-title"></h2>
+        <p id="over-reason"></p>
+        <button class="primary" id="btn-again">Play again</button>
+        <button class="secondary" id="btn-over-menu">Menu</button>
+        <button class="secondary" id="btn-over-look">Look at the board</button>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

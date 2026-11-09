@@ -3,7 +3,8 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+// Optional argument: the project folder (default: repo root), e.g. `node scripts/make-playable.mjs chess-shooter`.
+const root = join(dirname(fileURLToPath(import.meta.url)), '..', process.argv[2] || '');
 const dist = join(root, 'dist');
 let html = readFileSync(join(dist, 'dev.html'), 'utf8');
 

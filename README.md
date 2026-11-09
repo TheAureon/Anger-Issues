@@ -6,6 +6,9 @@ Wreck it, rebuild it, repeat. No fail state, no timer, nothing to unlock.
 
 Built with [Three.js](https://threejs.org/) and the [Rapier](https://rapier.rs/) physics engine.
 
+> Also in this repo: **[Gunmate](chess-shooter/README.md)**, chess where the pieces shoot instead of
+> capture, played first-person from your pieces. Open `chess-shooter/index.html`.
+
 ## Playing it
 
 Open `index.html`. That's it: it's the whole game in one self-contained file (code, physics engine and
