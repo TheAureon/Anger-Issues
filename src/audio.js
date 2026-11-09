@@ -137,6 +137,26 @@ export class Sfx {
     this.noise({ dur: 0.4, freq: 5000, type: 'highpass', gain: 0.18, attack: 0.02 });
   }
 
+  /** Short fanfares: 'badge' (chime) or 'level' (rising arpeggio). */
+  jingle(kind) {
+    if (!this.ok('jingle_' + kind, 0.3)) return;
+    const c = this.ctx;
+    const notes = kind === 'level' ? [523, 659, 784, 1047, 1319] : [784, 1175, 1568];
+    notes.forEach((f, i) => {
+      const t = c.currentTime + i * (kind === 'level' ? 0.08 : 0.09);
+      const o = c.createOscillator();
+      o.type = kind === 'level' ? 'square' : 'triangle';
+      o.frequency.setValueAtTime(f, t);
+      const g = c.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(kind === 'level' ? 0.12 : 0.22, t + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.35);
+      o.connect(g).connect(this.master);
+      o.start(t);
+      o.stop(t + 0.4);
+    });
+  }
+
   /** Continuous sound: kind = buzz | grind | rocket | wind. Returns { stop() }. */
   loop(kind) {
     if (!this.ctx || !this.enabled) return { stop() {} };

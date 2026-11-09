@@ -85,6 +85,7 @@ export function makePress(game, at, { cycle = false, room = false, size = 0.55, 
         if (Math.abs(_v.x - center.x) > half || Math.abs(_v.z - center.z) > half || _v.y > plateBottom + 0.02) continue;
         if (e.flat) continue;
         e.flat = true;
+        game.progress?.ev('flat', { pos: _v.clone() });
         game.gore?.puddle(_v, 0.35 + Math.random() * 0.2);
         game.gore?.burst(_v.clone().setY(0.1), { count: 30, speed: 4, spread: 1.2 });
         e.mesh.scale.set(1.35, 0.35, 1.35);
@@ -167,6 +168,7 @@ export function makeChipper(game, at, right, { room = false, look = 'chipper' } 
       cool.set(o, game.time + 0.5);
       active = 0.6;
       if (o.kind === 'part') for (const j of [...o.joints]) game.mannequin.sever(j, { quiet: true });
+      if (o.kind === 'part') game.progress?.ev('shred', { pos: p });
       if (o.kind === 'part') game.gore?.shred(isBlender ? center.clone().setY(H + 0.25) : center.clone().addScaledVector(right, W + 0.55).setY(0.95), exitDir);
       const p = isBlender
         ? center.clone().setY(H + 0.25)

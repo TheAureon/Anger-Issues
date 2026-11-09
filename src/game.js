@@ -114,6 +114,7 @@ export class Game {
     this.sun.intensity = def.sun ?? 2.2;
     if (this.mannequin.parts.length) this.mannequin.reset();
     this.life?.onRoom(id);
+    this.progress?.ev('room', { id });
     this.ui?.update();
   }
 
@@ -272,6 +273,7 @@ export class Game {
     }
     if (fx) this.fx.explosion(p, radius);
     this.life?.onBoom(p, radius);
+    this.progress?.ev('boom', { pos: p, radius });
     if (sound) this.sfx.boom(radius / 3);
     this.stats.booms++;
   }
@@ -354,6 +356,7 @@ export class Game {
     const consumed = tool.down?.(p, hit);
     if (consumed) {
       this.activeTool = tool;
+      this.progress?.ev('tool', { id: tool.id });
       this.activePointer = e.pointerId;
       this.controls.enabled = false;
       e.preventDefault();
@@ -517,6 +520,7 @@ export class Game {
     this.life.update(vdt);
     this.gore.update(vdt);
     this.music?.update(dt);
+    this.progress?.update();
     this.updateHover();
     if (this.title && (this.title.active || this.title.swoop)) this.title.frame(dt);
     else this.controls.update();

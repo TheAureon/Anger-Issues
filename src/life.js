@@ -151,6 +151,9 @@ export class Life {
   }
 
   knockDown(time) {
+    const pel = this.game.mannequin.byName?.pelvis;
+    // Only real falls from standing count (not being dropped after a carry).
+    if (pel?.alive && this.state === 'stand') this.game.progress?.ev('knockdown', { pos: bodyPos(pel.body).add(new THREE.Vector3(0, 0.6, 0)) });
     this.state = 'down';
     this.stateT = 0;
     this.downFor = time + this.pain * 0.8 + Math.random() * 0.5;

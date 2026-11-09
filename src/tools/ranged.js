@@ -236,6 +236,7 @@ export function fireArrow(game, pos, dir, speed) {
     game.sfx.knock();
     if (other.kind === 'part') {
       game.mannequin.damage(other, 0.3, tip);
+      game.progress?.ev('arrow', { part: other.partName, pos: tip });
       game.fx.burst(tip, { count: 6, colors: game.mannequin.skin.chips, speed: 1.5, size: 0.02 });
     }
   };

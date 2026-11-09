@@ -71,6 +71,19 @@ It settles back down over time. Slow-mo muffles it, and the 🎵 button turns it
 Browsers block sound until your first click or key press, so on a first visit the title is silent
 and the music starts when you press start.
 
+**XP, ranks and badges:** just for bragging rights, since nothing is ever locked behind them. You earn
+XP for:
+- hits, broken joints, explosions, knockdowns, shredding and flattening;
+- rebuilding (more for putting a piece back where it belongs);
+- trying a tool, room or look for the first time.
+
+Quick chains of actions build a combo of up to ×5, and floating "+XP" numbers pop up where it happened.
+Levels come with ranks, from *Mildly Annoyed* through *Seething* and *Volcanic* up to *Inner Peace*.
+There are 31 badges (*Heads Will Roll*, *Wrong Way Round*, *Pancake*, *Bullseye*, *Combo King*,
+*Zen*, ...), each announced with a toast and a chime. The level chip in the top bar opens your
+profile: rank, XP, lifetime stats, and every badge with progress bars. Progress is saved locally and
+can be reset from the profile.
+
 **Name it:** the 🏷️ button in the top bar (or a click on the floating name tag above its head) opens
 a name box, with a 🎲 for random suggestions. The name stays over its head, even when that head is
 rolling around on its own, and it's remembered next time you play.
@@ -130,6 +143,7 @@ src/
   rooms.js         rooms and their hazards
   fx.js            instanced particles, flashes, camera shake, 2D overlay trails
   audio.js         WebAudio synth sound effects (no audio files)
+  progress.js      XP, combos, ranks, badges, toasts, profile panel (saved in localStorage)
   music.js         procedural music: lookahead sequencer, synth instruments, chaos-reactive layers
   title.js         cinematic title screen: spotlight, slam-in logo, press any key, swoop into play
   ui.js, style.css toolbox, menus, help

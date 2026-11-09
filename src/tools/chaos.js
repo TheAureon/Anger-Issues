@@ -156,6 +156,10 @@ export function chaosTools(game) {
       // Glue holds the two pieces where they are right now (nothing gets yanked
       // across the room); a glue strand bridges the gap between the two dabs.
       const worldA = toWorld(a.entity.body, a.local);
+      game.progress?.ev('glue', {
+        toStatic: !a.entity.body.isDynamic() || !hit.entity.body.isDynamic(),
+        toPart: a.entity.kind === 'part' || hit.entity.kind === 'part',
+      });
       const j = game.joints.create({
         a: a.entity,
         b: hit.entity,

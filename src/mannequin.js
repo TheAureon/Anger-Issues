@@ -217,6 +217,7 @@ export class Mannequin {
     } catch {
       /* storage unavailable */
     }
+    this.game.progress?.ev('name');
   }
 
   get skin() {
@@ -294,6 +295,7 @@ export class Mannequin {
         else if (role === 'sclera') o.material = skin.sclera;
       });
     }
+    this.game.progress?.ev('skin', { id });
   }
 
   /** All entities connected to `start` through joints. anchored = touches a fixed body. */
@@ -351,6 +353,7 @@ export class Mannequin {
     }
     this.game.stats.severed++;
     this.game.life?.onSever(j, quiet);
+    this.game.progress?.ev('sever', { j, pos: w, quiet });
     return true;
   }
 
@@ -385,6 +388,7 @@ export class Mannequin {
     this.game.life?.onHurt(e, amount, point);
     this.game.gore?.onHurt(e, amount, point);
     this.game.music?.bump(amount * 0.15);
+    this.game.progress?.ev('hurt', { e, amount, point });
     if (j.damage >= j.strength) return this.sever(j);
     return false;
   }
@@ -442,6 +446,7 @@ export class Mannequin {
     sfx.clank();
     this.game.stats.attached++;
     this.game.life?.onAttach(c, !!proper, j);
+    this.game.progress?.ev('attach', { c, proper: !!proper, point: c.point });
     return true;
   }
 
