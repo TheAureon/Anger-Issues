@@ -42,6 +42,19 @@ Open `index.html` at the repo root. It's the whole game in one self-contained fi
 
 You start in your king's POV, with the full board in the corner.
 
+## Pass & Play (local multiplayer, no internet)
+
+Play a friend on one computer or phone: take your turn, then hand the device over.
+
+- Enter both players' names in setup (⇅ swaps who plays White).
+- After each turn a **pass screen** covers the board: "Pass the device to Sam". It recaps what the
+  other player just did ("Alex's rook shot your knight on f6"), warns you if your king is threatened,
+  and waits until the next player taps **I'm Sam, start my turn**. You then look through your own
+  pieces, from your side of the board.
+- The pass screen can be turned off in setup if you're both watching the screen anyway.
+- **Play again** swaps sides so the other player gets White. <kbd>Esc</kbd> on the pass screen pauses.
+- Names are remembered for next time. XP and badges from Pass & Play go to this device's profile.
+
 ## Menus and difficulty
 
 Title screen → main menu (Play vs Computer, Pass & Play, How to Play, Settings) → game setup (mode,

@@ -85,6 +85,11 @@ let chosenOpp = 'ai';
 let difficulty = loadPref('gunmate-diff', 'normal');
 let chosenSide = loadPref('gunmate-side', 'w');
 let paused = false;
+// Pass & Play
+const names = { w: loadPref('gunmate-name-w', 'Player 1'), b: loadPref('gunmate-name-b', 'Player 2') };
+let handoffOn = loadPref('gunmate-handoff', '1') === '1';
+let pendingTurn = null; // piece id to look through once the next player taps Ready
+let lastDesc = '';
 let gameToken = 0; // bumps on every new game so stale async turns stop
 const settings = {
   musicVol: +loadPref('gunmate-vol-music', '70'),
@@ -126,6 +131,8 @@ let graves = { w: [], b: [] };
 let started = false;
 
 const viewerColor = () => (vsAI ? human : st.turn);
+const playerName = (c) => (vsAI ? (c === human ? 'You' : DIFFICULTIES[difficulty].label) : names[c] || COLOR_NAME[c]);
+const pieceName = (p) => R.NAMES[p.type].toLowerCase();
 const humanTurn = () => started && !paused && st && !st.result && (!vsAI || st.turn === human);
 
 function sqOfId(id) {
@@ -377,7 +384,11 @@ function refresh() {
   }
 
   // Top bar.
-  $('turn-text').textContent = st.result ? 'Game over' : `${COLOR_NAME[st.turn]} to play${vsAI && st.turn !== human ? ' (computer)' : ''}`;
+  $('turn-text').textContent = st.result
+    ? 'Game over'
+    : vsAI
+      ? `${COLOR_NAME[st.turn]} to play${st.turn !== human ? ' (computer)' : ''}`
+      : `${playerName(st.turn)} (${COLOR_NAME[st.turn]}) to play`;
   $('turn-dot').className = st.turn;
   $('mode-tag').textContent =
     (st.mode === R.CLASSIC ? 'Classic · siege the king' : 'MerciZero · kings can die') +
@@ -553,9 +564,14 @@ async function doMove(a, byHuman) {
     status(`${COLOR_NAME[np.color]} pawn promoted to ${R.NAMES[np.type].toLowerCase()}!`, 'good');
   }
   const f = R.toWorld(a.from);
+  let desc;
+  if (a.castle) desc = `${playerName(p.color)} castled ${a.castle === 'K' ? 'kingside' : 'queenside'}.`;
+  else if (a.promo) desc = `${playerName(p.color)} moved a pawn to ${R.sqName(a.to)} and promoted it to a ${R.NAMES[a.promoType || 'q'].toLowerCase()}.`;
+  else desc = `${playerName(p.color)} moved their ${pieceName(p)} ${R.sqName(a.from)} → ${R.sqName(a.to)}.`;
   commit(next, {
     squares: new Set([a.from, a.to]),
     line: { kind: 'move', a: { f: f.x + 4, r: 4 - f.z }, b: { f: to.x + 4, r: 4 - to.z } },
+    desc,
   }, tok);
 }
 
@@ -645,11 +661,20 @@ async function doShoot(a, aim, spreadMul, mine = false) {
   }
   turnTo(g, FORWARD_YAW[shooter.color], 0.4);
   const f = R.toWorld(a.from);
+  const target = st.board[a.to];
+  const who = `${playerName(shooter.color)}'s ${pieceName(shooter)}`;
+  let desc;
+  if (hitPiece && kill == null) desc = `${who} fired at your ${pieceName(target)}, but the bullet ricocheted off a king.`;
+  else if (kill == null) desc = `${who} fired at your ${pieceName(target)} on ${R.sqName(a.to)} and missed.`;
+  else if (hitPiece.color === shooter.color) desc = `${who} accidentally shot their own ${pieceName(hitPiece)} on ${R.sqName(kill)}.`;
+  else if (kill === a.to) desc = `${who} shot your ${pieceName(hitPiece)} on ${R.sqName(kill)}.`;
+  else desc = `${who} missed your ${pieceName(target)} but hit your ${pieceName(hitPiece)} on ${R.sqName(kill)}.`;
   const next = R.applyRaw(st, a, kill);
   await wait(kill != null ? 350 : 150);
   commit(next, {
     squares: new Set([a.from, ...(kill != null ? [kill] : [])]),
     line: { kind: 'shoot', hit: kill != null, a: { f: f.x + 4, r: 4 - f.z }, b: { f: res.end.x + 4, r: 4 - res.end.z } },
+    desc,
   }, tok);
 }
 
@@ -657,6 +682,7 @@ function commit(next, lastInfo, tok = gameToken) {
   if (tok !== gameToken) return; // a new game started while this action was animating
   st = next;
   last = lastInfo;
+  lastDesc = lastInfo.desc || '';
   if (vsAI) {
     let diff = 0;
     for (const p of st.board) if (p && p.type !== 'k') diff += (p.color === human ? 1 : -1) * R.VALUE[p.type];
@@ -704,14 +730,13 @@ async function nextTurn() {
   if (!vsAI) {
     busy = true;
     refresh();
-    await wait(650);
+    await wait(handoffOn ? 1100 : 650);
     if (tok !== gameToken) return;
-    banner(`${COLOR_NAME[st.turn]} to play`);
     const id = sqOfId(remembered[st.turn]) >= 0 ? remembered[st.turn] : kingId(st.turn);
-    viewMode = 'pov';
-    busy = false;
-    povId = null;
-    setPov(id);
+    if (handoffOn) {
+      pendingTurn = id;
+      showHandoff();
+    } else beginLocalTurn(id);
     return;
   }
   busy = false;
@@ -719,9 +744,48 @@ async function nextTurn() {
   refresh();
 }
 
+function beginLocalTurn(id) {
+  pendingTurn = null;
+  viewMode = 'pov';
+  busy = false;
+  povId = null;
+  setPov(id);
+  banner(`${playerName(st.turn)}'s turn`);
+}
+
+// The cover screen between Pass & Play turns.
+function showHandoff(opening = false) {
+  const c = st.turn;
+  $('ho-glyph').textContent = '♚\uFE0E';
+  $('handoff').className = `screen handoff side-${c}`;
+  $('ho-name').textContent = playerName(c);
+  $('ho-turn').textContent = `${COLOR_NAME[c]} · turn ${Math.floor(st.ply / 2) + 1}`;
+  $('ho-recap').textContent = opening
+    ? `${names.w} (White) vs ${names.b} (Black). White moves first.`
+    : lastDesc
+      ? `Last turn: ${lastDesc}`
+      : '';
+  const k = R.findKing(st, c);
+  const threatened = k >= 0 && R.attackedBy(st, k, R.other(c));
+  $('ho-alert').classList.toggle('hidden', !threatened);
+  $('ho-alert').textContent = st.mode === R.CLASSIC ? '⚠ Your king is in check!' : '⚠ Your king is in the line of fire!';
+  $('btn-ready').textContent = `I'm ${playerName(c)}, start my turn`;
+  showScreen('handoff');
+}
+function resumeGame() {
+  showScreen(pendingTurn != null ? 'handoff' : 'game');
+}
+$('btn-ready').addEventListener('click', () => {
+  sfx.click();
+  showScreen('game');
+  beginLocalTurn(pendingTurn);
+});
+$('btn-ho-pause').addEventListener('click', () => showScreen('pause'));
+
 function gameOver(result) {
   const won = result.winner;
   let title = won ? `${COLOR_NAME[won]} wins` : 'Draw';
+  if (!vsAI && won) title = `${playerName(won)} wins!`;
   if (vsAI && won) title = won === human ? 'You win!' : 'The computer wins';
   $('over-title').textContent = title;
   $('over-reason').textContent = result.reason[0].toUpperCase() + result.reason.slice(1) + '.';
@@ -745,6 +809,8 @@ function startGame() {
   graves = { w: [], b: [] };
   renderGraves();
   last = null;
+  lastDesc = '';
+  pendingTurn = null;
   busy = false;
   paused = false;
   placeAll();
@@ -757,6 +823,12 @@ function startGame() {
   showScreen('game');
   setPov(remembered[viewerColor()]);
   const modeLine = chosenMode === R.CLASSIC ? 'Classic: siege the king' : 'MerciZero: shoot the king';
+  if (!vsAI && handoffOn) {
+    // Start with the device in White's hands.
+    pendingTurn = remembered.w;
+    showHandoff(true);
+    return;
+  }
   banner(vsAI && human === 'b' ? 'You play Black' : modeLine, 1600);
   if (vsAI && human === 'b') nextTurn();
 }
@@ -852,7 +924,8 @@ window.addEventListener('keydown', (e) => {
       if (id !== 'promo' && !$(id).classList.contains('hidden')) return closeOverlay(id);
     }
     if (screen === 'game') return showScreen('pause');
-    if (screen === 'pause') return showScreen('game');
+    if (screen === 'pause') return resumeGame();
+    if (screen === 'handoff') return showScreen('pause');
     if (screen === 'setup') return showScreen('main-menu');
     return;
   }
@@ -881,7 +954,7 @@ function cyclePiece(dir) {
 
 // --- Screens: title → main menu → setup → game, plus pause / settings / help overlays ------
 
-const SCREENS = ['title', 'main-menu', 'setup', 'pause', 'over'];
+const SCREENS = ['title', 'main-menu', 'setup', 'pause', 'over', 'handoff'];
 let screen = 'title';
 function showScreen(name) {
   screen = name;
@@ -890,7 +963,7 @@ function showScreen(name) {
   paused = name !== 'game' && name !== 'over';
   $('btn-continue').classList.toggle('hidden', !(started && st && !st.result));
   if (name === 'pause') {
-    const who = vsAI ? `vs ${DIFFICULTIES[difficulty].label}, you play ${COLOR_NAME[human]}` : 'pass & play';
+    const who = vsAI ? `vs ${DIFFICULTIES[difficulty].label}, you play ${COLOR_NAME[human]}` : `${names.w} (White) vs ${names.b} (Black)`;
     $('pause-info').textContent = `${st.mode === R.CLASSIC ? 'Classic' : 'MerciZero'} · ${who} · turn ${Math.floor(st.ply / 2) + 1}`;
   }
   if (name === 'main-menu') renderProfile();
@@ -914,11 +987,49 @@ function openSetup(opp) {
   chosenOpp = opp;
   $('setup-title').textContent = opp === 'ai' ? 'Play vs Computer' : 'Pass & Play';
   $('ai-options').classList.toggle('hidden', opp !== 'ai');
+  $('local-options').classList.toggle('hidden', opp === 'ai');
+  fillNames();
+  $('opt-handoff').checked = handoffOn;
   selectIn('mode-choices', 'mode', chosenMode);
   selectIn('diff-choices', 'diff', difficulty);
   selectIn('side-choices', 'side', chosenSide);
   showScreen('setup');
 }
+// Pass & Play player names.
+function cleanName(v, fallback) {
+  const t = v.replace(/\s+/g, ' ').trim().slice(0, 16);
+  return t || fallback;
+}
+function fillNames() {
+  $('name-w').value = names.w;
+  $('name-b').value = names.b;
+}
+function saveNames() {
+  savePref('gunmate-name-w', names.w);
+  savePref('gunmate-name-b', names.b);
+}
+function swapNames() {
+  [names.w, names.b] = [names.b, names.w];
+  saveNames();
+  fillNames();
+}
+for (const c of ['w', 'b']) {
+  $(`name-${c}`).addEventListener('input', () => {
+    names[c] = cleanName($(`name-${c}`).value, c === 'w' ? 'Player 1' : 'Player 2');
+    saveNames();
+  });
+  // Typing in a name shouldn't trigger game shortcuts (M, V, Q/E...).
+  $(`name-${c}`).addEventListener('keydown', (e) => e.stopPropagation());
+}
+$('btn-swap').addEventListener('click', () => {
+  sfx.click();
+  swapNames();
+});
+$('opt-handoff').addEventListener('change', () => {
+  handoffOn = $('opt-handoff').checked;
+  savePref('gunmate-handoff', handoffOn ? '1' : '0');
+});
+
 for (const [id, attr, set] of [
   ['mode-choices', 'mode', (v) => { chosenMode = v; savePref('gunmate-mode', v); }],
   ['diff-choices', 'diff', (v) => { difficulty = v; savePref('gunmate-diff', v); }],
@@ -942,7 +1053,7 @@ function leaveTitle() {
 $('title').addEventListener('click', leaveTitle);
 if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) $('press').textContent = 'Tap to start';
 
-$('btn-continue').addEventListener('click', () => showScreen('game'));
+$('btn-continue').addEventListener('click', resumeGame);
 $('btn-vs-ai').addEventListener('click', () => openSetup('ai'));
 $('btn-vs-local').addEventListener('click', () => openSetup('local'));
 $('btn-howto').addEventListener('click', () => $('help').classList.remove('hidden'));
@@ -950,7 +1061,7 @@ $('btn-settings').addEventListener('click', () => $('settings').classList.remove
 $('btn-to-title').addEventListener('click', () => showScreen('title'));
 $('btn-start').addEventListener('click', startGame);
 $('btn-setup-back').addEventListener('click', () => showScreen('main-menu'));
-$('btn-resume').addEventListener('click', () => showScreen('game'));
+$('btn-resume').addEventListener('click', resumeGame);
 $('btn-restart').addEventListener('click', startGame);
 $('btn-pause-howto').addEventListener('click', () => $('help').classList.remove('hidden'));
 $('btn-pause-settings').addEventListener('click', () => $('settings').classList.remove('hidden'));
@@ -1009,7 +1120,10 @@ $('btn-sound').addEventListener('click', () => {
   sfx.setMuted(!sfx.muted);
   $('btn-sound').textContent = sfx.muted ? '🔇' : '🔊';
 });
-$('btn-again').addEventListener('click', startGame);
+$('btn-again').addEventListener('click', () => {
+  if (!vsAI) swapNames(); // fair rematch: the other player gets White
+  startGame();
+});
 $('btn-over-menu').addEventListener('click', () => showScreen('main-menu'));
 $('btn-over-look').addEventListener('click', () => {
   showScreen('game');

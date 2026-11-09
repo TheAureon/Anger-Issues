@@ -450,7 +450,7 @@ h3 { margin: 12px 0 2px; font-size: 14px; text-transform: uppercase; letter-spac
 .toast b { display: block; font-size: 16px; }
 .toast span { display: block; font-size: 12.5px; color: var(--muted); }
 .t-icon { font-size: 30px; flex: none; }
-.t-icon.lvl { font-size: 20px; }
+.toast .t-icon.lvl { display: grid; font-size: 20px; color: #241805; }
 .toast.level { border-color: #ffe08a; background: linear-gradient(120deg, rgba(90, 64, 14, 0.95), rgba(22, 20, 28, 0.95)); }
 @keyframes toast-in { from { opacity: 0; transform: translateX(60px) scale(0.9); } }
 
@@ -521,6 +521,53 @@ h3 { margin: 12px 0 2px; font-size: 14px; text-transform: uppercase; letter-spac
 .state { font-size: 12.5px; font-weight: 700; }
 .state.eq { color: var(--green); }
 .state.locked { color: var(--muted); }
+
+
+/* --- Pass & Play --- */
+.names { display: flex; flex-direction: column; gap: 6px; }
+.name-row { display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.04); }
+.name-row input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-weight: 700;
+  color: var(--text);
+  background: transparent;
+  border: none;
+  outline: none;
+  padding: 4px 0;
+  -webkit-user-select: text;
+  user-select: text;
+}
+.name-row:focus-within { border-color: var(--gold); }
+.side-lbl { width: 46px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.side-dot { width: 16px; height: 16px; border-radius: 50%; border: 2px solid #888; flex: none; }
+.side-dot.w { background: #f7efdc; }
+.side-dot.b { background: #26232c; border-color: #ccc; }
+.secondary.slim { padding: 8px; font-size: 14px; }
+.setting small { display: block; font-size: 11.5px; color: var(--muted); font-weight: 400; }
+
+.handoff {
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  z-index: 15;
+  background: radial-gradient(ellipse at center, #2a2733 0%, #121117 75%);
+}
+.handoff.side-w { background: radial-gradient(ellipse at center, #4a4436 0%, #16140f 78%); }
+.handoff.side-b { background: radial-gradient(ellipse at center, #3a2230 0%, #120d12 78%); }
+.handoff-card { width: min(440px, 100%); text-align: center; display: flex; flex-direction: column; align-items: stretch; }
+.ho-glyph { font-size: 72px; line-height: 1; margin-bottom: 6px; animation: bob 2.4s ease-in-out infinite; }
+.side-w .ho-glyph { color: #fff6e0; text-shadow: 0 4px 0 #8a5a1e; }
+.side-b .ho-glyph { color: #1d1a22; -webkit-text-stroke: 1.5px #e8b94a; }
+.ho-label { color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; font-size: 13px; }
+.ho-name { font-size: clamp(36px, 9vw, 60px); font-weight: 900; line-height: 1.1; margin: 4px 0; overflow-wrap: anywhere; }
+.ho-turn { color: var(--gold); font-weight: 700; }
+.ho-recap { margin: 18px 0 0; padding: 12px 14px; border-radius: 12px; background: rgba(255, 255, 255, 0.06); border: 1px solid var(--line); color: var(--text); line-height: 1.4; }
+.ho-recap:empty { display: none; }
+.ho-alert { margin-top: 10px; padding: 10px 14px; border-radius: 12px; background: rgba(255, 74, 54, 0.15); border: 1px solid rgba(255, 74, 54, 0.7); color: #ffd2cb; font-weight: 700; }
+.handoff .primary { margin-top: 22px; font-size: 18px; padding: 15px; }
+.handoff .menu-btn.small { align-self: center; margin-top: 8px; }
 
 @media (max-width: 640px) {
   #main-menu { background: rgba(14, 13, 19, 0.78); }

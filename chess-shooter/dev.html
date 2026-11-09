@@ -66,7 +66,7 @@
         </button>
         <button class="menu-btn hidden" id="btn-continue"><b>Continue</b><span>Back to your game</span></button>
         <button class="menu-btn" id="btn-vs-ai"><b>Play vs Computer</b><span>Four difficulty levels</span></button>
-        <button class="menu-btn" id="btn-vs-local"><b>Pass &amp; Play</b><span>Two players on one screen</span></button>
+        <button class="menu-btn" id="btn-vs-local"><b>Pass &amp; Play</b><span>Play a friend on this device, no internet needed</span></button>
         <button class="menu-btn" id="btn-shop"><b>Shop</b><span id="shop-menu-sub">Spend XP on skins</span></button>
         <button class="menu-btn" id="btn-badges"><b>Badges &amp; Stats</b><span id="badge-count">Achievements and your record</span></button>
         <button class="menu-btn" id="btn-howto"><b>How to Play</b><span>Rules and controls</span></button>
@@ -100,8 +100,31 @@
             <button class="choice" data-side="r"><b>Random</b><span>Toss a coin</span></button>
           </div>
         </div>
+        <div id="local-options" class="hidden">
+          <div class="row-label">Players</div>
+          <div class="names">
+            <label class="name-row"><span class="side-dot w"></span><span class="side-lbl">White</span><input id="name-w" maxlength="16" placeholder="Player 1" autocomplete="off" /></label>
+            <label class="name-row"><span class="side-dot b"></span><span class="side-lbl">Black</span><input id="name-b" maxlength="16" placeholder="Player 2" autocomplete="off" /></label>
+          </div>
+          <button class="secondary slim" id="btn-swap">⇅ Swap sides</button>
+          <label class="setting check"><span>Pass screen between turns<small>Covers the board until the next player taps Ready</small></span><input type="checkbox" id="opt-handoff" /></label>
+        </div>
         <button id="btn-start" class="primary">Start</button>
         <button class="secondary" id="btn-setup-back">Back</button>
+      </div>
+    </div>
+
+    <!-- Pass & Play hand-off: covers the board between turns -->
+    <div id="handoff" class="screen handoff hidden">
+      <div class="handoff-card">
+        <div class="ho-glyph" id="ho-glyph">♚</div>
+        <div class="ho-label">Pass the device to</div>
+        <div class="ho-name" id="ho-name">Player 2</div>
+        <div class="ho-turn" id="ho-turn"></div>
+        <div class="ho-recap" id="ho-recap"></div>
+        <div class="ho-alert hidden" id="ho-alert"></div>
+        <button class="primary" id="btn-ready">Start my turn</button>
+        <button class="menu-btn small" id="btn-ho-pause">Pause</button>
       </div>
     </div>
 
