@@ -58,6 +58,10 @@ heavy impacts, accumulated damage, blades, or being stretched apart. Every joint
 that pulls it back to its rest pose, so the figure behaves like a stiff wooden mannequin. The 🦴 button
 cycles Stiff → Loose → Ragdoll (Ragdoll switches its brain off).
 
+**Name it:** the 🏷️ button in the top bar (or a click on the floating name tag above its head) opens
+a name box, with a 🎲 for random suggestions. The name stays over its head, even when that head is
+rolling around on its own, and it's remembered next time you play.
+
 **It has a mind of its own:** the mannequin balances on its own feet and wanders around the room,
 pausing to look around. Hit it hard and it falls over, lies there a moment, then gets back up. It
 limps on damaged legs and drags itself along with its arms if it loses both legs. Its eyes blink and

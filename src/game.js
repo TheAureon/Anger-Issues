@@ -133,6 +133,7 @@ export class Game {
     if (this.activeTool) this.endGesture(null, true);
     this.mannequin.reset();
     this.sfx.whoosh();
+    if (this.mannequin.name) this.ui?.flashWord(`${this.mannequin.name} is back`, true);
   }
 
   clearProps() {

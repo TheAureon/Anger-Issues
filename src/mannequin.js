@@ -200,7 +200,23 @@ export class Mannequin {
     this.game = game;
     this.parts = [];
     this.skinId = 'wood';
+    let name = null;
+    try {
+      name = localStorage.getItem('ai-name');
+    } catch {
+      /* storage unavailable */
+    }
+    this.name = name ?? 'Dummy';
     this.steps = 0;
+  }
+
+  setName(name) {
+    this.name = String(name).replace(/\s+/g, ' ').trim().slice(0, 20);
+    try {
+      localStorage.setItem('ai-name', this.name);
+    } catch {
+      /* storage unavailable */
+    }
   }
 
   get skin() {

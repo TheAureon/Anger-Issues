@@ -4,6 +4,8 @@ import { SKINS } from './mannequin.js';
 import { STIFFNESS } from './joints.js';
 import { GORE_MODES } from './gore.js';
 
+const NAMES = ['Gerald', 'Woody', 'Splinter', 'Kevin', 'Sir Oakley', 'Plank', 'Pinecone', 'Barry', 'Timber', 'Clive', 'Norbert', 'Knot', 'Dougie', 'Mr. Hinges', 'Twiggy', 'Steve'];
+
 function el(tag, cls, html) {
   const e = document.createElement(tag);
   if (cls) e.className = cls;
@@ -27,7 +29,10 @@ export class UI {
     this.roomBtn.onclick = () => this.openMenu('room');
     this.skinBtn = el('button', 'pill');
     this.skinBtn.onclick = () => this.openMenu('skin');
-    left.append(this.roomBtn, this.skinBtn);
+    this.nameBtn = el('button', 'pill name-pill');
+    this.nameBtn.title = 'Name the mannequin';
+    this.nameBtn.onclick = () => this.openNamer();
+    left.append(this.nameBtn, this.roomBtn, this.skinBtn);
     top.append(left);
     const actions = el('div', 'group actions');
     const btn = (icon, title, fn) => {
@@ -58,6 +63,45 @@ export class UI {
     // Menus
     this.menu = el('div', 'menu hidden');
     root.append(this.menu);
+
+    // Name tag floating over the head, and the rename dialog.
+    this.nametag = el('button', 'nametag hidden');
+    this.nametag.title = 'Click to rename';
+    this.nametag.onclick = () => this.openNamer();
+    root.append(this.nametag);
+    this.namer = el(
+      'div',
+      'namer hidden',
+      `<form class="card">
+        <label for="ai-name-input">Name your mannequin</label>
+        <div class="row">
+          <input id="ai-name-input" maxlength="20" autocomplete="off" spellcheck="false" placeholder="e.g. Gerald" />
+          <button type="button" class="icon dice" title="Random name" aria-label="Random name">🎲</button>
+        </div>
+        <div class="row end">
+          <button type="button" class="pill cancel">Cancel</button>
+          <button type="submit" class="pill go">Save</button>
+        </div>
+      </form>`,
+    );
+    this.nameInput = this.namer.querySelector('input');
+    this.namer.querySelector('form').onsubmit = (e) => {
+      e.preventDefault();
+      this.saveName();
+    };
+    this.namer.querySelector('.cancel').onclick = () => this.closeNamer();
+    this.namer.querySelector('.dice').onclick = () => {
+      this.nameInput.value = NAMES[(Math.random() * NAMES.length) | 0];
+      this.nameInput.focus();
+    };
+    this.namer.onclick = (e) => {
+      if (e.target === this.namer) this.closeNamer();
+    };
+    this.nameInput.onkeydown = (e) => {
+      if (e.key === 'Escape') this.closeNamer();
+      e.stopPropagation();
+    };
+    root.append(this.namer);
     document.addEventListener('pointerdown', (e) => {
       if (!this.menu.contains(e.target) && e.target !== this.roomBtn && e.target !== this.skinBtn) this.menu.classList.add('hidden');
     });
@@ -112,6 +156,7 @@ export class UI {
         <h2>Anger Issues</h2>
         <p>Vent on the mannequin. It walks around on its own and it's scared of you. Fair enough. Wreck it, then rebuild it any way you like. Nothing to unlock, no timer, no fail state.</p>
         <ul>
+          <li><b>Name it</b> with the 🏷️ button (or click its name tag).</li>
           <li><b>Pick a tool</b> from the toolbox at the bottom and use it on the mannequin.</li>
           <li><b>Grab</b> (✋, or hold <kbd>Shift</kbd> with any tool) drags and flings pieces.</li>
           <li><b>Rebuild:</b> drag a loose piece onto the body. When the green ring shows, let go and it sticks there. Rotate it first with <kbd>R</kbd> / <kbd>F</kbd> (or the ⟳ ⇆ buttons) to put a head on backwards.</li>
@@ -134,6 +179,49 @@ export class UI {
     if (!seen) this.toggleHelp(true);
 
     this.update();
+  }
+
+  openNamer() {
+    this.menu.classList.add('hidden');
+    this.nameInput.value = this.game.mannequin.name;
+    this.namer.classList.remove('hidden');
+    this.nameInput.focus();
+    this.nameInput.select();
+  }
+
+  closeNamer() {
+    this.namer.classList.add('hidden');
+    this.nameInput.blur();
+  }
+
+  saveName() {
+    const m = this.game.mannequin;
+    const before = m.name;
+    m.setName(this.nameInput.value);
+    this.closeNamer();
+    if (m.name && m.name !== before) this.flashWord(`Hi, ${m.name}!`, true);
+    this.update();
+  }
+
+  /** Per frame: keep the name tag over the head. */
+  tick() {
+    const game = this.game;
+    const head = game.mannequin.byName?.head;
+    const tag = this.nametag;
+    if (!head?.alive || !game.mannequin.name) {
+      tag.classList.add('hidden');
+      return;
+    }
+    const t = head.body.translation();
+    const v = this._v || (this._v = game.camera.position.clone());
+    v.set(t.x, t.y + 0.27, t.z).project(game.camera);
+    if (v.z > 1 || Math.abs(v.x) > 1.1 || Math.abs(v.y) > 1.1) {
+      tag.classList.add('hidden');
+      return;
+    }
+    tag.classList.remove('hidden');
+    const r = game.renderer.domElement.getBoundingClientRect();
+    tag.style.transform = `translate(${((v.x + 1) / 2) * r.width}px, ${((1 - v.y) / 2) * r.height}px) translate(-50%, -100%)`;
   }
 
   toggleHelp(force) {
@@ -202,6 +290,8 @@ export class UI {
   update() {
     const game = this.game;
     const room = ROOMS[game.roomId];
+    this.nameBtn.textContent = `🏷️ ${game.mannequin.name || 'Name me'}`;
+    this.nametag.textContent = game.mannequin.name;
     if (room) this.roomBtn.innerHTML = `${room.icon} ${room.name} ▾`;
     const skin = SKINS[game.mannequin.skinId];
     this.skinBtn.innerHTML = `${skin.icon} ${skin.name} ▾`;
