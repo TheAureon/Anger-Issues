@@ -34,6 +34,7 @@ export class Music {
     this.ctx = null;
     this.mood = 0;
     this.enabled = true;
+    this.volume = 1;
     this.step = 0;
     this.next = 0;
     this.timer = null;
@@ -45,7 +46,7 @@ export class Music {
     this.ctx = ctx;
     this.noiseBuf = noiseBuf;
     this.bus = ctx.createGain();
-    this.bus.gain.value = this.enabled ? 0.3 : 0;
+    this.bus.gain.value = this.level();
     // Gentle echo for space.
     const delay = ctx.createDelay(1);
     delay.delayTime.value = STEP * 3;
@@ -61,9 +62,18 @@ export class Music {
     this.timer = setInterval(() => this.schedule(), 25);
   }
 
+  level() {
+    return this.enabled ? 0.3 * this.volume : 0;
+  }
+
   setEnabled(on) {
     this.enabled = on;
-    if (this.bus) this.bus.gain.setTargetAtTime(on ? 0.3 : 0, this.ctx.currentTime, 0.2);
+    if (this.bus) this.bus.gain.setTargetAtTime(this.level(), this.ctx.currentTime, 0.2);
+  }
+
+  setVolume(v) {
+    this.volume = v;
+    if (this.bus) this.bus.gain.setTargetAtTime(this.level(), this.ctx.currentTime, 0.05);
   }
 
   setMood(m) {

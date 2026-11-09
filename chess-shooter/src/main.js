@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import './style.css';
 import * as R from './rules.js';
-import { chooseAction, AI_SPREAD } from './ai.js';
+import { chooseAction, DIFFICULTIES } from './ai.js';
 import { buildPiece, buildViewGun } from './pieces.js';
 import { buildWorld } from './world.js';
 import { Fx } from './fx.js';
@@ -58,6 +58,7 @@ const diamondMat = new THREE.MeshBasicMaterial({ color: 0xff3322 });
 const activeRing = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: 0x5cc8ff }));
 const hoverRing = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85 }));
 activeRing.position.y = hoverRing.position.y = 0.015;
+activeRing.visible = hoverRing.visible = false;
 scene.add(activeRing, hoverRing);
 let diamonds = [];
 
@@ -72,9 +73,36 @@ const TINT = {
 
 let st = null;
 let vsAI = true;
-const human = 'w';
-let chosenMode = R.CLASSIC;
+let human = 'w';
+let chosenMode = loadPref('gunmate-mode', R.CLASSIC);
 let chosenOpp = 'ai';
+let difficulty = loadPref('gunmate-diff', 'normal');
+let chosenSide = loadPref('gunmate-side', 'w');
+let paused = false;
+let gameToken = 0; // bumps on every new game so stale async turns stop
+const settings = {
+  musicVol: +loadPref('gunmate-vol-music', '70'),
+  sfxVol: +loadPref('gunmate-vol-sfx', '90'),
+  sens: +loadPref('gunmate-sens', '100'),
+  cover: loadPref('gunmate-cover', '1') === '1',
+  hints: loadPref('gunmate-hints', '1') === '1',
+};
+
+function loadPref(key, fallback) {
+  try {
+    const v = localStorage.getItem(key);
+    return v == null ? fallback : v;
+  } catch {
+    return fallback;
+  }
+}
+function savePref(key, value) {
+  try {
+    localStorage.setItem(key, String(value));
+  } catch {
+    /* storage unavailable: setting lasts for this visit only */
+  }
+}
 const groups = new Map(); // piece id -> THREE.Group
 const remembered = { w: null, b: null }; // last POV piece per side
 let povId = null;
@@ -92,7 +120,7 @@ let graves = { w: [], b: [] };
 let started = false;
 
 const viewerColor = () => (vsAI ? human : st.turn);
-const humanTurn = () => started && st && !st.result && (!vsAI || st.turn === human);
+const humanTurn = () => started && !paused && st && !st.result && (!vsAI || st.turn === human);
 
 function sqOfId(id) {
   if (!st || id == null) return -1;
@@ -300,7 +328,7 @@ function refresh() {
     from,
     moves: acts.filter((a) => a.kind === 'move').map((a) => a.to),
     targets: acts.filter((a) => a.kind === 'shoot').map((a) => a.to),
-    coverage: new Set(from >= 0 && !busy ? R.gunCoverage(st, from) : []),
+    coverage: new Set(from >= 0 && !busy && settings.cover ? R.gunCoverage(st, from) : []),
   };
   for (const s of current.moves) {
     const m = new THREE.Mesh(moveGeo, moveMat);
@@ -345,7 +373,9 @@ function refresh() {
   // Top bar.
   $('turn-text').textContent = st.result ? 'Game over' : `${COLOR_NAME[st.turn]} to play${vsAI && st.turn !== human ? ' (computer)' : ''}`;
   $('turn-dot').className = st.turn;
-  $('mode-tag').textContent = st.mode === R.CLASSIC ? 'Classic · siege the king' : 'MerciZero · kings can die';
+  $('mode-tag').textContent =
+    (st.mode === R.CLASSIC ? 'Classic · siege the king' : 'MerciZero · kings can die') +
+    (vsAI ? ` · vs ${DIFFICULTIES[difficulty].label}` : ' · pass & play');
   $('mode-tag').className = st.mode;
 
   // Piece card.
@@ -484,6 +514,7 @@ function slide(g, to, dur, hop) {
 }
 
 async function doMove(a, byHuman) {
+  const tok = gameToken;
   busy = true;
   if (a.promo && byHuman) a = { ...a, promoType: await askPromotion() };
   refresh();
@@ -500,6 +531,7 @@ async function doMove(a, byHuman) {
     jobs.push(slide(rg, R.toWorld(R.sqAt(a.castle === 'K' ? 5 : 3, r)), 0.45, false));
   }
   await Promise.all(jobs);
+  if (tok !== gameToken) return;
   sfx.step();
   const next = R.applyRaw(st, a);
   if (a.promo) {
@@ -517,7 +549,7 @@ async function doMove(a, byHuman) {
   commit(next, {
     squares: new Set([a.from, a.to]),
     line: { kind: 'move', a: { f: f.x + 4, r: 4 - f.z }, b: { f: to.x + 4, r: 4 - to.z } },
-  });
+  }, tok);
 }
 
 function faceYaw(from, x, z) {
@@ -531,6 +563,7 @@ function turnTo(g, target, dur = 0.18) {
 }
 
 async function doShoot(a, aim, spreadMul) {
+  const tok = gameToken;
   busy = true;
   refresh();
   const shooter = st.board[a.from];
@@ -555,6 +588,7 @@ async function doShoot(a, aim, spreadMul) {
   fx.muzzleFlash(start);
   sfx.gunshot(shooter.type);
   await fx.tracer(start, end);
+  if (tok !== gameToken) return;
 
   let kill = null;
   let victimDesc = '';
@@ -596,10 +630,11 @@ async function doShoot(a, aim, spreadMul) {
   commit(next, {
     squares: new Set([a.from, ...(kill != null ? [kill] : [])]),
     line: { kind: 'shoot', hit: kill != null, a: { f: f.x + 4, r: 4 - f.z }, b: { f: res.end.x + 4, r: 4 - res.end.z } },
-  });
+  }, tok);
 }
 
-function commit(next, lastInfo) {
+function commit(next, lastInfo, tok = gameToken) {
+  if (tok !== gameToken) return; // a new game started while this action was animating
   st = next;
   last = lastInfo;
   const result = R.judge(st);
@@ -627,21 +662,25 @@ function commit(next, lastInfo) {
 }
 
 async function nextTurn() {
+  const tok = gameToken;
   if (vsAI && st.turn !== human) {
     busy = true;
     refresh();
-    $('turn-text').textContent = 'Computer is aiming…';
+    $('turn-text').textContent = `${DIFFICULTIES[difficulty].label} is aiming…`;
     await wait(550);
-    const a = chooseAction(st);
+    while (paused && tok === gameToken) await wait(120);
+    if (tok !== gameToken) return;
+    const a = chooseAction(st, difficulty);
     if (!a) return;
     if (a.kind === 'move') await doMove(a, false);
-    else await doShoot(a, R.aimCenter(st, a.to), AI_SPREAD);
+    else await doShoot(a, R.aimCenter(st, a.to), DIFFICULTIES[difficulty].aim);
     return;
   }
   if (!vsAI) {
     busy = true;
     refresh();
     await wait(650);
+    if (tok !== gameToken) return;
     banner(`${COLOR_NAME[st.turn]} to play`);
     const id = sqOfId(remembered[st.turn]) >= 0 ? remembered[st.turn] : kingId(st.turn);
     viewMode = 'pov';
@@ -662,31 +701,37 @@ function gameOver(result) {
   $('over-title').textContent = title;
   $('over-reason').textContent = result.reason[0].toUpperCase() + result.reason.slice(1) + '.';
   sfx.fanfare(!vsAI || won === human);
-  setTimeout(() => $('over').classList.remove('hidden'), 1100);
+  const tok = gameToken;
+  setTimeout(() => {
+    if (tok === gameToken && screen === 'game') showScreen('over');
+  }, 1100);
 }
 
 // --- Game setup ----------------------------------------------------------------------------
 
 function startGame() {
   sfx.unlock();
+  gameToken++;
+  tweens.length = 0;
   st = R.newGame(chosenMode);
   vsAI = chosenOpp === 'ai';
+  human = vsAI ? (chosenSide === 'r' ? (Math.random() < 0.5 ? 'w' : 'b') : chosenSide) : 'w';
   graves = { w: [], b: [] };
   renderGraves();
   last = null;
   busy = false;
+  paused = false;
   placeAll();
   remembered.w = kingId('w');
   remembered.b = kingId('b');
   povId = null;
   viewMode = 'pov';
   started = true;
-  setPov(remembered.w);
-  $('menu').classList.add('hidden');
-  $('over').classList.add('hidden');
-  $('hud').classList.remove('hidden');
-  $('btn-resume').classList.add('hidden');
-  banner(chosenMode === R.CLASSIC ? 'Classic: siege the king' : 'MerciZero: shoot the king', 1600);
+  showScreen('game');
+  setPov(remembered[viewerColor()]);
+  const modeLine = chosenMode === R.CLASSIC ? 'Classic: siege the king' : 'MerciZero: shoot the king';
+  banner(vsAI && human === 'b' ? 'You play Black' : modeLine, 1600);
+  if (vsAI && human === 'b') nextTurn();
 }
 
 // --- Input ---------------------------------------------------------------------------------
@@ -747,13 +792,13 @@ canvas.addEventListener('pointercancel', () => {
 });
 
 function look(dx, dy) {
-  const zoom = fov / 70;
+  const zoom = (fov / 70) * (settings.sens / 100);
   if (viewMode === 'pov') {
     yaw -= dx * 0.005 * zoom;
     pitch = Math.max(-1.25, Math.min(1.0, pitch - dy * 0.005 * zoom));
   } else {
-    ovYaw -= dx * 0.006;
-    ovPitch = Math.max(0.2, Math.min(1.45, ovPitch + dy * 0.005));
+    ovYaw -= dx * 0.006 * (settings.sens / 100);
+    ovPitch = Math.max(0.2, Math.min(1.45, ovPitch + dy * 0.005 * (settings.sens / 100)));
   }
 }
 
@@ -771,15 +816,23 @@ const keys = new Set();
 window.addEventListener('keydown', (e) => {
   if (e.target.tagName === 'INPUT') return;
   keys.add(e.key.toLowerCase());
-  if (!started) return;
   const k = e.key.toLowerCase();
+  if (screen === 'title') return leaveTitle();
+  if (k === 'escape') {
+    // Close the topmost panel first.
+    for (const id of ['promo', 'help', 'settings']) {
+      if (id !== 'promo' && !$(id).classList.contains('hidden')) return closeOverlay(id);
+    }
+    if (screen === 'game') return showScreen('pause');
+    if (screen === 'pause') return showScreen('game');
+    if (screen === 'setup') return showScreen('main-menu');
+    return;
+  }
+  if (k === 'm') return setMusic(!sfx.music.enabled);
+  if (screen !== 'game') return;
   if (k === 'v' || k === 'tab') {
     e.preventDefault();
     setOverview(viewMode !== 'over');
-  } else if (k === 'escape') {
-    toggleMenu();
-  } else if (k === 'm') {
-    setMusic(!sfx.music.enabled);
   } else if (k === 'q' || k === 'e') {
     cyclePiece(k === 'e' ? 1 : -1);
   }
@@ -798,64 +851,127 @@ function cyclePiece(dir) {
   setPov(next);
 }
 
-function toggleMenu() {
-  const m = $('menu');
-  if (m.classList.contains('hidden')) {
-    m.classList.remove('hidden');
-    $('btn-resume').classList.toggle('hidden', !st || !!st.result);
-  } else if (st) {
-    m.classList.add('hidden');
+// --- Screens: title → main menu → setup → game, plus pause / settings / help overlays ------
+
+const SCREENS = ['title', 'main-menu', 'setup', 'pause', 'over'];
+let screen = 'title';
+function showScreen(name) {
+  screen = name;
+  for (const id of SCREENS) $(id).classList.toggle('hidden', id !== name);
+  $('hud').classList.toggle('hidden', name !== 'game' && name !== 'pause' && name !== 'over');
+  paused = name === 'pause';
+  $('btn-continue').classList.toggle('hidden', !(started && st && !st.result));
+  if (name === 'pause') {
+    const who = vsAI ? `vs ${DIFFICULTIES[difficulty].label}, you play ${COLOR_NAME[human]}` : 'pass & play';
+    $('pause-info').textContent = `${st.mode === R.CLASSIC ? 'Classic' : 'MerciZero'} · ${who} · turn ${Math.floor(st.ply / 2) + 1}`;
   }
+  updateMood();
+}
+function closeOverlay(id) {
+  $(id).classList.add('hidden');
 }
 
-// Menu wiring.
-for (const b of document.querySelectorAll('#mode-choices .choice')) {
-  b.addEventListener('click', () => {
-    chosenMode = b.dataset.mode;
-    document.querySelectorAll('#mode-choices .choice').forEach((x) => x.classList.toggle('selected', x === b));
+function selectIn(containerId, attr, value) {
+  for (const b of document.querySelectorAll(`#${containerId} .choice`)) b.classList.toggle('selected', b.dataset[attr] === value);
+}
+
+// Difficulty cards are generated from the AI's table.
+$('diff-choices').innerHTML = Object.entries(DIFFICULTIES)
+  .map(([key, d], i) => `<button class="choice" data-diff="${key}"><b>${'★'.repeat(i + 1)}${'☆'.repeat(3 - i)} ${d.label}</b><span>${d.blurb}</span></button>`)
+  .join('');
+
+function openSetup(opp) {
+  sfx.click();
+  chosenOpp = opp;
+  $('setup-title').textContent = opp === 'ai' ? 'Play vs Computer' : 'Pass & Play';
+  $('ai-options').classList.toggle('hidden', opp !== 'ai');
+  selectIn('mode-choices', 'mode', chosenMode);
+  selectIn('diff-choices', 'diff', difficulty);
+  selectIn('side-choices', 'side', chosenSide);
+  showScreen('setup');
+}
+for (const [id, attr, set] of [
+  ['mode-choices', 'mode', (v) => { chosenMode = v; savePref('gunmate-mode', v); }],
+  ['diff-choices', 'diff', (v) => { difficulty = v; savePref('gunmate-diff', v); }],
+  ['side-choices', 'side', (v) => { chosenSide = v; savePref('gunmate-side', v); }],
+]) {
+  $(id).addEventListener('click', (e) => {
+    const b = e.target.closest('.choice');
+    if (!b) return;
+    sfx.click();
+    set(b.dataset[attr]);
+    selectIn(id, attr, b.dataset[attr]);
   });
 }
-for (const b of document.querySelectorAll('#opp-choices .choice')) {
-  b.addEventListener('click', () => {
-    chosenOpp = b.dataset.opp;
-    document.querySelectorAll('#opp-choices .choice').forEach((x) => x.classList.toggle('selected', x === b));
-  });
+
+function leaveTitle() {
+  if (screen !== 'title') return;
+  sfx.unlock();
+  sfx.click();
+  showScreen('main-menu');
 }
+$('title').addEventListener('click', leaveTitle);
+if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) $('press').textContent = 'Tap to start';
+
+$('btn-continue').addEventListener('click', () => showScreen('game'));
+$('btn-vs-ai').addEventListener('click', () => openSetup('ai'));
+$('btn-vs-local').addEventListener('click', () => openSetup('local'));
+$('btn-howto').addEventListener('click', () => $('help').classList.remove('hidden'));
+$('btn-settings').addEventListener('click', () => $('settings').classList.remove('hidden'));
+$('btn-to-title').addEventListener('click', () => showScreen('title'));
 $('btn-start').addEventListener('click', startGame);
-$('btn-resume').addEventListener('click', () => $('menu').classList.add('hidden'));
-$('btn-menu').addEventListener('click', toggleMenu);
+$('btn-setup-back').addEventListener('click', () => showScreen('main-menu'));
+$('btn-resume').addEventListener('click', () => showScreen('game'));
+$('btn-restart').addEventListener('click', startGame);
+$('btn-pause-howto').addEventListener('click', () => $('help').classList.remove('hidden'));
+$('btn-pause-settings').addEventListener('click', () => $('settings').classList.remove('hidden'));
+$('btn-quit').addEventListener('click', () => showScreen('main-menu'));
+$('btn-menu').addEventListener('click', () => showScreen('pause'));
+$('btn-settings-close').addEventListener('click', () => closeOverlay('settings'));
+
+// Settings panel.
+function applySettings() {
+  sfx.music.setVolume(settings.musicVol / 100);
+  sfx.setSfxVolume(settings.sfxVol / 100);
+  $('hint').classList.toggle('hidden', !settings.hints);
+}
+for (const [id, key, pref] of [['vol-music', 'musicVol', 'gunmate-vol-music'], ['vol-sfx', 'sfxVol', 'gunmate-vol-sfx'], ['sens', 'sens', 'gunmate-sens']]) {
+  $(id).value = settings[key];
+  $(id).addEventListener('input', () => {
+    settings[key] = +$(id).value;
+    savePref(pref, settings[key]);
+    applySettings();
+  });
+}
+$('vol-sfx').addEventListener('change', () => sfx.gunshot('p'));
+for (const [id, key, pref] of [['opt-cover', 'cover', 'gunmate-cover'], ['opt-hints', 'hints', 'gunmate-hints']]) {
+  $(id).checked = settings[key];
+  $(id).addEventListener('change', () => {
+    settings[key] = $(id).checked;
+    savePref(pref, settings[key] ? '1' : '0');
+    applySettings();
+    if (st) refresh();
+  });
+}
+applySettings();
+
 $('btn-view').addEventListener('click', () => setOverview(viewMode !== 'over'));
 $('btn-help').addEventListener('click', () => $('help').classList.remove('hidden'));
 $('btn-help-close').addEventListener('click', () => $('help').classList.add('hidden'));
-function loadPref(key, fallback) {
-  try {
-    const v = localStorage.getItem(key);
-    return v == null ? fallback : v === '1';
-  } catch {
-    return fallback;
-  }
-}
-function savePref(key, on) {
-  try {
-    localStorage.setItem(key, on ? '1' : '0');
-  } catch {
-    /* storage unavailable: setting lasts for this visit only */
-  }
-}
 function setMusic(on) {
   sfx.music.setEnabled(on);
   $('btn-music').classList.toggle('off', !on);
   $('btn-music').title = on ? 'Music on (M)' : 'Music off (M)';
-  savePref('gunmate-music', on);
+  savePref('gunmate-music', on ? '1' : '0');
 }
-setMusic(loadPref('gunmate-music', true));
+setMusic(loadPref('gunmate-music', '1') === '1');
 $('btn-music').addEventListener('click', () => setMusic(!sfx.music.enabled));
 // Music needs a user gesture before it can start.
 window.addEventListener('pointerdown', () => sfx.unlock(), { once: true });
 
 // Battle mood: tense when the side you're playing has its king in an enemy gun's reach.
 function updateMood() {
-  if (!started || !st || st.result) return sfx.music.setMood(0);
+  if (!started || !st || st.result || screen !== 'game') return sfx.music.setMood(0);
   const k = R.findKing(st, viewerColor());
   sfx.music.setMood(k >= 0 && R.attackedBy(st, k, R.other(viewerColor())) ? 2 : 1);
 }
@@ -865,12 +981,9 @@ $('btn-sound').addEventListener('click', () => {
   $('btn-sound').textContent = sfx.muted ? '🔇' : '🔊';
 });
 $('btn-again').addEventListener('click', startGame);
-$('btn-over-menu').addEventListener('click', () => {
-  $('over').classList.add('hidden');
-  $('menu').classList.remove('hidden');
-});
+$('btn-over-menu').addEventListener('click', () => showScreen('main-menu'));
 $('btn-over-look').addEventListener('click', () => {
-  $('over').classList.add('hidden');
+  showScreen('game');
   setOverview(true);
 });
 

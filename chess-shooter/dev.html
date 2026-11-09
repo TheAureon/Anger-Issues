@@ -20,7 +20,7 @@
           <button id="btn-music" title="Music on (M)">🎵</button>
           <button id="btn-sound" title="All sound on/off">🔊</button>
           <button id="btn-help" title="How to play">?</button>
-          <button id="btn-menu" title="Menu (Esc)">☰</button>
+          <button id="btn-menu" title="Pause (Esc)">⏸</button>
         </div>
       </div>
       <div id="status"></div>
@@ -41,13 +41,37 @@
       <div id="hint">Drag to look · click a piece to see through it · click a square to move · click a red-marked enemy to shoot · scroll to zoom</div>
     </div>
 
-    <div id="menu" class="overlay">
+    <!-- Title screen -->
+    <div id="title" class="screen">
+      <div class="title-inner">
+        <div class="logo-pieces"><span>♜</span><span>♞</span><span class="big">♚</span><span>♝</span><span>♛</span></div>
+        <h1 class="logo">GUNMATE</h1>
+        <p class="tagline">Chess, but every piece is armed.</p>
+        <div class="press" id="press">Click or press any key to start</div>
+      </div>
+      <div class="title-foot">Low-poly first-person chess · v1.1</div>
+    </div>
+
+    <!-- Main menu -->
+    <div id="main-menu" class="screen side hidden">
+      <div class="menu-col">
+        <div class="menu-logo">GUNMATE</div>
+        <button class="menu-btn hidden" id="btn-continue"><b>Continue</b><span>Back to your game</span></button>
+        <button class="menu-btn" id="btn-vs-ai"><b>Play vs Computer</b><span>Four difficulty levels</span></button>
+        <button class="menu-btn" id="btn-vs-local"><b>Pass &amp; Play</b><span>Two players on one screen</span></button>
+        <button class="menu-btn" id="btn-howto"><b>How to Play</b><span>Rules and controls</span></button>
+        <button class="menu-btn" id="btn-settings"><b>Settings</b><span>Music, sound, camera</span></button>
+        <button class="menu-btn small" id="btn-to-title">Back to title</button>
+      </div>
+    </div>
+
+    <!-- New game setup -->
+    <div id="setup" class="overlay hidden">
       <div class="panel">
-        <h1>Gunmate</h1>
-        <p class="sub">Chess, but every piece is armed. You see the battle through their eyes.</p>
+        <h2 id="setup-title">Play vs Computer</h2>
         <div class="row-label">Mode</div>
         <div class="choices" id="mode-choices">
-          <button class="choice selected" data-mode="classic">
+          <button class="choice" data-mode="classic">
             <b>Classic</b>
             <span>Kings are bulletproof. Siege the king: checkmate wins.</span>
           </button>
@@ -56,33 +80,60 @@
             <span>Kings can die. Shoot the enemy king to win. No check rules.</span>
           </button>
         </div>
-        <div class="row-label">Opponent</div>
-        <div class="choices" id="opp-choices">
-          <button class="choice selected" data-opp="ai"><b>Computer</b><span>You play White.</span></button>
-          <button class="choice" data-opp="local"><b>2 players</b><span>Hot-seat on one screen.</span></button>
+        <div id="ai-options">
+          <div class="row-label">Difficulty</div>
+          <div class="choices four" id="diff-choices"></div>
+          <div class="row-label">Your side</div>
+          <div class="choices three" id="side-choices">
+            <button class="choice" data-side="w"><b>White</b><span>You move first</span></button>
+            <button class="choice" data-side="b"><b>Black</b><span>Computer moves first</span></button>
+            <button class="choice" data-side="r"><b>Random</b><span>Toss a coin</span></button>
+          </div>
         </div>
-        <button id="btn-start" class="primary">Play</button>
-        <button id="btn-resume" class="secondary hidden">Resume</button>
-        <details>
-          <summary>Rules</summary>
-          <ul class="rules">
-            <li>Pieces move exactly like chess, but only onto <b>empty</b> squares.</li>
-            <li>Instead of capturing, you <b>shoot</b>. A kill doesn't move your piece: your rook can snipe and stay on its safe square.</li>
-            <li>Each turn: <b>move OR shoot</b>, never both.</li>
-            <li>Gun range: <b>pawn</b> = its two diagonal capture squares, <b>knight</b> = its L squares (the bullet flies straight, not in an L), <b>king</b> = the 8 squares around it.</li>
-            <li><b>Rook, bishop, queen</b> shoot along their lines but only half as far: 4 squares. The line must be clear.</li>
-            <li>You can <b>miss</b>. Long shots wobble. Bullets hit whatever is in their path first, even your own pieces, and can fly over short ones.</li>
-            <li>Pawns promote when they reach the far rank. Castling works as in chess.</li>
-            <li><b>Classic:</b> check means a king is in an enemy gun's reach. You can't leave your king in check. No legal action while in check = checkmate.</li>
-            <li><b>MerciZero:</b> anything goes. Shoot the king and win (shoot your own and lose).</li>
-          </ul>
-        </details>
+        <button id="btn-start" class="primary">Start</button>
+        <button class="secondary" id="btn-setup-back">Back</button>
+      </div>
+    </div>
+
+    <!-- Settings -->
+    <div id="settings" class="overlay hidden">
+      <div class="panel small">
+        <h2>Settings</h2>
+        <label class="setting"><span>Music volume</span><input type="range" id="vol-music" min="0" max="100" /></label>
+        <label class="setting"><span>Effects volume</span><input type="range" id="vol-sfx" min="0" max="100" /></label>
+        <label class="setting"><span>Look sensitivity</span><input type="range" id="sens" min="30" max="250" /></label>
+        <label class="setting check"><span>Show field of fire</span><input type="checkbox" id="opt-cover" /></label>
+        <label class="setting check"><span>Show control hints</span><input type="checkbox" id="opt-hints" /></label>
+        <button class="primary" id="btn-settings-close">Done</button>
+      </div>
+    </div>
+
+    <!-- Pause -->
+    <div id="pause" class="overlay hidden">
+      <div class="panel small">
+        <h2>Paused</h2>
+        <p id="pause-info" class="sub"></p>
+        <button class="primary" id="btn-resume">Resume</button>
+        <button class="secondary" id="btn-restart">Restart</button>
+        <button class="secondary" id="btn-pause-howto">How to play</button>
+        <button class="secondary" id="btn-pause-settings">Settings</button>
+        <button class="secondary" id="btn-quit">Quit to main menu</button>
       </div>
     </div>
 
     <div id="help" class="overlay hidden">
       <div class="panel">
         <h2>How to play</h2>
+        <h3>Rules</h3>
+        <ul class="rules">
+          <li>Pieces move exactly like chess, but only onto <b>empty</b> squares.</li>
+          <li>Instead of capturing, you <b>shoot</b>. A kill doesn't move your piece.</li>
+          <li>Each turn: <b>move OR shoot</b>, never both.</li>
+          <li>Gun range: <b>pawn</b> = its two diagonal capture squares, <b>knight</b> = its L squares (the bullet flies straight), <b>king</b> = the 8 squares around it. <b>Rook, bishop, queen</b>: along their lines, up to 4 squares (half their movement), line must be clear.</li>
+          <li>You can <b>miss</b>. Bullets hit whatever is in their path first, even your own pieces.</li>
+          <li><b>Classic:</b> kings are bulletproof; checkmate (the siege) wins. <b>MerciZero:</b> shoot the king to win.</li>
+        </ul>
+        <h3>Controls</h3>
         <ul class="rules">
           <li>You start looking through your <b>king</b>. The board in the corner shows everything.</li>
           <li><b>Click one of your pieces</b> (in 3D or on the corner board) to jump into its point of view. <kbd>Q</kbd>/<kbd>E</kbd> cycle pieces.</li>
@@ -112,7 +163,7 @@
         <h2 id="over-title"></h2>
         <p id="over-reason"></p>
         <button class="primary" id="btn-again">Play again</button>
-        <button class="secondary" id="btn-over-menu">Menu</button>
+        <button class="secondary" id="btn-over-menu">Main menu</button>
         <button class="secondary" id="btn-over-look">Look at the board</button>
       </div>
     </div>

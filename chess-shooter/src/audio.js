@@ -4,6 +4,8 @@ import { Music } from './music.js';
 export const music = new Music();
 let ctx = null;
 let master = null;
+let sfxBus = null;
+let sfxVolume = 1;
 let noiseBuf = null;
 export let muted = false;
 
@@ -15,6 +17,9 @@ function ensure() {
     master = ctx.createGain();
     master.gain.value = 0.55;
     master.connect(ctx.destination);
+    sfxBus = ctx.createGain();
+    sfxBus.gain.value = sfxVolume;
+    sfxBus.connect(master);
     noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
     const d = noiseBuf.getChannelData(0);
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
@@ -25,6 +30,10 @@ function ensure() {
 }
 export function unlock() {
   ensure();
+}
+export function setSfxVolume(v) {
+  sfxVolume = v;
+  if (sfxBus) sfxBus.gain.value = v;
 }
 export function setMuted(m) {
   muted = m;
@@ -42,7 +51,7 @@ function noise(t, dur, { freq = 1200, q = 0.7, type = 'lowpass', gain = 1, attac
   g.gain.setValueAtTime(0, t);
   g.gain.linearRampToValueAtTime(gain, t + attack);
   g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-  src.connect(f).connect(g).connect(master);
+  src.connect(f).connect(g).connect(sfxBus);
   src.start(t, Math.random() * 0.5);
   src.stop(t + dur + 0.05);
   return f;
@@ -55,7 +64,7 @@ function tone(t, dur, f0, f1, { type = 'sine', gain = 0.5 } = {}) {
   const g = ctx.createGain();
   g.gain.setValueAtTime(gain, t);
   g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-  o.connect(g).connect(master);
+  o.connect(g).connect(sfxBus);
   o.start(t);
   o.stop(t + dur + 0.05);
 }

@@ -38,10 +38,24 @@ Open `index.html` at the repo root. It's the whole game in one self-contained fi
 | Zoom sights | Scroll |
 | Overview camera | <kbd>V</kbd> or the 🗺️ button |
 | Music on/off | <kbd>M</kbd> or the 🎵 button (🔊 mutes everything) |
-| Menu | <kbd>Esc</kbd> |
+| Pause | <kbd>Esc</kbd> or ⏸ |
 
-You start in your king's POV, with the full board in the corner. Play against the computer (you're
-White) or hot-seat with two players.
+You start in your king's POV, with the full board in the corner.
+
+## Menus and difficulty
+
+Title screen → main menu (Play vs Computer, Pass & Play, How to Play, Settings) → game setup (mode,
+difficulty, your side). <kbd>Esc</kbd> pauses (resume, restart, settings, quit). Settings: music and
+effects volume, look sensitivity, field-of-fire tint, control hints. Choices are remembered.
+
+| Level | Aim | Thinking |
+| --- | --- | --- |
+| ★ Recruit | shaky (1.6× wobble) | judges only its own move, blunders 1 in 4 turns |
+| ★★ Soldier | decent (1.12×) | considers your best reply |
+| ★★★ Sniper | steady (0.92×) | considers your best reply, no randomness |
+| ★★★★ Warlord | deadly (0.8×) | three plies: its move, your reply, its answer |
+
+You can play White, Black, or let a coin toss decide.
 
 ## Music
 
@@ -54,7 +68,7 @@ and bass on the menu, adds drums, an arpeggio and a melody once the battle start
 ```
 dev.html          Vite entry
 src/rules.js      pure rules: moves, gun reach, check, ballistics (runs in Node)
-src/ai.js         computer opponent: 2-ply expectimax that accounts for hit chance
+src/ai.js         computer opponent: 1-3 ply expectimax by difficulty, aware of hit chance
 src/main.js       renderer, POV/overview camera, input, turn flow, HUD
 src/pieces.js     low-poly pieces and their guns
 src/world.js      board, plateau, trees, rocks, lights
