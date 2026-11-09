@@ -12,6 +12,15 @@ import { ROOMS } from './rooms.js';
 import { mat, mesh, geo } from './materials.js';
 
 const STEP = 1 / 60;
+// Physical key -> [screen right, screen up, depth (into the screen)].
+const CAM_KEYS = {
+  KeyW: [0, 1, 0],
+  KeyS: [0, -1, 0],
+  KeyA: [-1, 0, 0],
+  KeyD: [1, 0, 0],
+  KeyE: [0, 0, 1],
+  KeyQ: [0, 0, -1],
+};
 const MAX_PROPS = 80;
 const MAX_GADGETS = 8;
 
@@ -303,6 +312,14 @@ export class Game {
       { capture: true, passive: false },
     );
     window.addEventListener('keydown', (e) => this.onKey(e));
+    // Keyboard camera: WASD slides across the screen, Q/E move in/out (physical keys, so AZERTY works too).
+    this.camKeys = new Set();
+    window.addEventListener('keyup', (e) => {
+      this.camKeys.delete(e.code);
+      if (e.key === 'Shift') this.camFast = false;
+    });
+    window.addEventListener('blur', () => this.camKeys.clear());
+    this.camVel = new THREE.Vector3();
   }
 
   makePointer(e) {
@@ -407,6 +424,11 @@ export class Game {
       if (!['Shift', 'Control', 'Alt', 'Meta', 'Tab', 'CapsLock'].includes(e.key)) this.title.play();
       return;
     }
+    if (e.key === 'Shift') this.camFast = true;
+    if (CAM_KEYS[e.code] && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      this.camKeys.add(e.code);
+      return;
+    }
     const k = e.key.toLowerCase();
     if (this.activeTool?.key?.(k)) return;
     if (k === 'escape') this.setTool(this.toolById('hand'));
@@ -414,6 +436,38 @@ export class Game {
     else if (k === 'c') this.clearProps();
     else if (k === 't') this.toggleSlowmo();
     else if (k === 'h' || k === '?') this.ui?.toggleHelp();
+  }
+
+  /** WASD / QE camera movement, smoothed. Moves the orbit target with the camera. */
+  moveCamera(dt) {
+    const want = new THREE.Vector3();
+    for (const code of this.camKeys) {
+      const [x, y, z] = CAM_KEYS[code];
+      want.x += x;
+      want.y += y;
+      want.z += z;
+    }
+    if (want.lengthSq() > 0) want.normalize().multiplyScalar(this.camFast ? 7 : 2.8);
+    this.camVel.lerp(want, Math.min(1, dt * 10));
+    if (this.camVel.lengthSq() < 1e-6) return;
+    const cam = this.camera;
+    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(cam.quaternion);
+    const up = new THREE.Vector3(0, 1, 0).applyQuaternion(cam.quaternion);
+    const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(cam.quaternion);
+    const move = right.multiplyScalar(this.camVel.x * dt).addScaledVector(up, this.camVel.y * dt).addScaledVector(fwd, this.camVel.z * dt);
+    const t = this.controls.target;
+    // Keep the camera and its target inside a sensible box above the floor.
+    const nextCam = cam.position.clone().add(move);
+    const nextT = t.clone().add(move);
+    if (nextCam.y < 0.15 || nextT.y < 0.05) {
+      const lift = Math.max(0.15 - nextCam.y, 0.05 - nextT.y);
+      nextCam.y += lift;
+      nextT.y += lift;
+    }
+    const lim = 30;
+    if (Math.abs(nextT.x) > lim || Math.abs(nextT.z) > lim || nextT.y > 20) return;
+    cam.position.copy(nextCam);
+    t.copy(nextT);
   }
 
   toggleSlowmo() {
@@ -523,7 +577,10 @@ export class Game {
     this.progress?.update();
     this.updateHover();
     if (this.title && (this.title.active || this.title.swoop)) this.title.frame(dt);
-    else this.controls.update();
+    else {
+      this.moveCamera(dt);
+      this.controls.update();
+    }
     this.fx.applyShake(this.camera);
     this.renderer.render(this.scene, this.camera);
     this.fx.removeShake(this.camera);

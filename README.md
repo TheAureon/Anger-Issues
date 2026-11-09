@@ -57,6 +57,7 @@ itself never does. Opened on its own, nothing is sent.
 | Rotate a held piece | <kbd>R</kbd> roll, <kbd>F</kbd> turn | ⟳ / ⇆ buttons |
 | Push / pull a held piece | Scroll | – |
 | Orbit camera | Drag empty space, or right-drag | One finger on empty space |
+| Move camera | <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> up / left / down / right, <kbd>Q</kbd> / <kbd>E</kbd> out / in (<kbd>Shift</kbd> = faster) | – |
 | Zoom / pan | Scroll / middle-drag | Two fingers |
 | New mannequin · clear props · slow-mo | <kbd>X</kbd> · <kbd>C</kbd> · <kbd>T</kbd> | Top-right buttons |
 

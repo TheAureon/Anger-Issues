@@ -165,7 +165,7 @@ export class UI {
           <li><b>Pick a tool</b> from the toolbox at the bottom and use it on the mannequin.</li>
           <li><b>Grab</b> (✋, or hold <kbd>Shift</kbd> with any tool) drags and flings pieces.</li>
           <li><b>Rebuild:</b> drag a loose piece onto the body. When the green ring shows, let go and it sticks there. Rotate it first with <kbd>R</kbd> / <kbd>F</kbd> (or the ⟳ ⇆ buttons) to put a head on backwards.</li>
-          <li><b>Camera:</b> drag empty space or right-drag to orbit, scroll to zoom. On touch: two fingers to zoom/pan.</li>
+          <li><b>Camera:</b> <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move it across the screen, <kbd>Q</kbd> / <kbd>E</kbd> move it out / in (hold <kbd>Shift</kbd> for faster). Drag empty space or right-drag to orbit, scroll to zoom. On touch: two fingers to zoom/pan.</li>
           <li><kbd>X</kbd> new mannequin · <kbd>C</kbd> clear props · <kbd>T</kbd> slow-mo · <kbd>Esc</kbd> grab tool</li>
         </ul>
         <button class="pill go">Let's go</button>
