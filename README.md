@@ -6,12 +6,12 @@ Wreck it, rebuild it, repeat. No fail state, no timer, nothing to unlock.
 
 Built with [Three.js](https://threejs.org/) and the [Rapier](https://rapier.rs/) physics engine.
 
-> Also in this repo: **[Gunmate](chess-shooter/README.md)**, chess where the pieces shoot instead of
-> capture, played first-person from your pieces. Open `chess-shooter/index.html`.
+> **`index.html` is now [Gunmate](chess-shooter/README.md)**, chess where the pieces shoot instead of
+> capture, played first-person from your pieces. The mannequin sandbox below is `anger-issues.html`.
 
 ## Playing it
 
-Open `index.html`. That's it: it's the whole game in one self-contained file (code, physics engine and
+Open `anger-issues.html`. That's it: it's the whole game in one self-contained file (code, physics engine and
 styles inlined, no network requests), so it works by double-clicking it, from GitHub Pages, or from any
 static host.
 
@@ -27,14 +27,14 @@ npm install
 npm run dev
 ```
 
-After changing anything in `src/`, regenerate the playable `index.html`:
+After changing anything in `src/`, regenerate the playable `anger-issues.html`:
 
 ```bash
 npm run build
 ```
 
 This bundles with Vite and then runs `scripts/make-playable.mjs`, which inlines everything into the root
-`index.html` (also copied to `dist/`). Commit the regenerated `index.html` along with your source changes.
+`anger-issues.html` (also copied to `dist/`). Commit the regenerated `anger-issues.html` along with your source changes.
 
 ## Controls
 
@@ -106,9 +106,10 @@ Everything is available from the start. No coins, no ads, no progression.
 ## Code map
 
 ```
-index.html                 generated, self-contained playable build (open this to play)
+anger-issues.html          generated, self-contained playable build (open this to play)
+index.html                 generated Gunmate build (see chess-shooter/)
 dev.html                   development entry for Vite
-scripts/make-playable.mjs  inlines the Vite build into index.html
+scripts/make-playable.mjs  inlines a Vite build into one HTML file
 src/
   main.js          boot: init Rapier, create Game + UI
   game.js          renderer, camera, input routing, fixed-step loop, props, explosions

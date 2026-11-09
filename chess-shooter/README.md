@@ -4,7 +4,7 @@ Chess, but every piece is armed. Low-poly 3D, played from the pieces' own eyes.
 
 ## Play
 
-Open `chess-shooter/index.html`. It's the whole game in one self-contained file (no network, no build).
+Open `index.html` at the repo root. It's the whole game in one self-contained file (no network, no build).
 
 ## Rules
 
@@ -68,4 +68,4 @@ npm run build:chess
 npm run test:chess
 ```
 
-The build regenerates `chess-shooter/index.html`; commit it with source changes.
+The build regenerates the root `index.html`; commit it with source changes.

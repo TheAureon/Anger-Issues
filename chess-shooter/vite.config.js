@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite';
 
 // Gunmate (chess shooter). `npm run build:chess` bundles chess-shooter/dev.html and
-// scripts/make-playable.mjs inlines it into chess-shooter/index.html (one self-contained file).
+// scripts/make-playable.mjs inlines it into the root index.html (one self-contained file).
 export default defineConfig({
   root: 'chess-shooter',
   base: './',

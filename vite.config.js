@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite';
 
 // Source entry is dev.html. `npm run build` bundles it and scripts/make-playable.mjs
-// inlines everything into the root index.html, a single file that plays anywhere
+// inlines everything into the root anger-issues.html, a single file that plays anywhere
 // (double-click, GitHub Pages, any static host) with no server or build step.
 export default defineConfig({
   base: './',

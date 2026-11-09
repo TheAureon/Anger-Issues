@@ -6,10 +6,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && node scripts/make-playable.mjs",
+    "build": "vite build && node scripts/make-playable.mjs . anger-issues.html",
     "preview": "vite preview",
     "dev:chess": "vite --config chess-shooter/vite.config.js",
-    "build:chess": "vite build --config chess-shooter/vite.config.js && node scripts/make-playable.mjs chess-shooter",
+    "build:chess": "vite build --config chess-shooter/vite.config.js && node scripts/make-playable.mjs chess-shooter index.html",
     "test:chess": "node scripts/test-chess-shooter.mjs"
   },
   "dependencies": {
