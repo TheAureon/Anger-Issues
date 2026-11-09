@@ -136,52 +136,6 @@ export class Sfx {
     this.noise({ dur: 0.4, freq: 5000, type: 'highpass', gain: 0.18, attack: 0.02 });
   }
 
-  /**
-   * Cartoon gibberish voice: one little formant "blip" per syllable.
-   * pitch ~1 normal, >1 scared/squeaky, <1 groggy. shaky adds vibrato (pain).
-   */
-  voice(text, { pitch = 1, shaky = false } = {}) {
-    if (!this.ok('voice', 0.3)) return;
-    const c = this.ctx;
-    const syll = Math.max(1, Math.min(9, Math.round(text.replace(/[^a-z]/gi, '').length / 3)));
-    const exclaim = /!/.test(text);
-    const question = /\?/.test(text);
-    let t = c.currentTime + 0.01;
-    const base = 190 * pitch;
-    for (let i = 0; i < syll; i++) {
-      const dur = 0.07 + Math.random() * 0.05;
-      let f = base * (0.85 + Math.random() * 0.35);
-      if (question && i === syll - 1) f *= 1.35;
-      if (exclaim && i === 0) f *= 1.2;
-      const o = c.createOscillator();
-      o.type = 'triangle';
-      o.frequency.setValueAtTime(f, t);
-      o.frequency.exponentialRampToValueAtTime(f * (question && i === syll - 1 ? 1.25 : 0.85), t + dur);
-      if (shaky) {
-        const lfo = c.createOscillator();
-        const lg = c.createGain();
-        lfo.frequency.value = 18;
-        lg.gain.value = f * 0.06;
-        lfo.connect(lg).connect(o.frequency);
-        lfo.start(t);
-        lfo.stop(t + dur + 0.02);
-      }
-      // Vowel-ish formant filter.
-      const flt = c.createBiquadFilter();
-      flt.type = 'bandpass';
-      flt.frequency.value = [700, 1100, 1500, 900, 2200][(Math.random() * 5) | 0];
-      flt.Q.value = 1.4;
-      const g = c.createGain();
-      g.gain.setValueAtTime(0.0001, t);
-      g.gain.exponentialRampToValueAtTime(exclaim ? 0.55 : 0.4, t + 0.012);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-      o.connect(flt).connect(g).connect(this.master);
-      o.start(t);
-      o.stop(t + dur + 0.02);
-      t += dur + 0.025;
-    }
-  }
-
   /** Continuous sound: kind = buzz | grind | rocket | wind. Returns { stop() }. */
   loop(kind) {
     if (!this.ctx || !this.enabled) return { stop() {} };

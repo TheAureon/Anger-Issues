@@ -45,16 +45,20 @@ be severed again.
 feet) joined at the neck, shoulders, elbows, wrists, waist, hips, knees and ankles. Joints break from
 heavy impacts, accumulated damage, blades, or being stretched apart. Every joint has a soft "muscle"
 that pulls it back to its rest pose, so the figure behaves like a stiff wooden mannequin. The 🦴 button
-cycles Stiff → Loose → Ragdoll. The 🧍 button takes it off its stand.
+cycles Stiff → Loose → Ragdoll (Ragdoll switches its brain off).
 
-**It's alive (sort of):** the mannequin breathes, blinks, sways, and follows your cursor with its eyes
-and head. Its face shifts between calm, pained, scared, happy, dizzy and bored. It flinches when hit,
-cowers from incoming anvils, cannonballs, presses and blades, kicks and flails when you pick it up,
-and waves when you put it back together. It talks too, in speech bubbles with a gibberish synth voice:
-it reacts to hits, lost limbs, explosions and threats, complains when you reattach things wrong, and
-teases you when you go quiet. A cut-off head keeps talking ("Put me back!"), and loose pieces hop back
-toward the body. Put a piece back where it belongs and it moves like the original again. The 💬 button
-turns the chatter off.
+**It has a mind of its own:** the mannequin balances on its own feet and wanders around the room,
+pausing to look around. Hit it hard and it falls over, lies there a moment, then gets back up. It
+limps on damaged legs and drags itself along with its arms if it loses both legs. Its eyes blink and
+follow things, and it breathes. Loose pieces hop back toward the body.
+
+**It's afraid of you:**
+- A sudden threat makes it startle and freeze for a moment, then run away, glancing back at the danger.
+- It backs away, still facing you, when you hover a weapon near it.
+- It crouches and covers its head when it's cornered.
+- Being hurt leaves it anxious: it keeps its distance from you, checks on you more often, breathes
+  faster and trembles. This fades slowly.
+- When scared, its eyes go wide with dilated pupils.
 
 **Cartoon gore (optional):** the 🩸 button cycles Off → Cartoon (ketchup red) → Slime → Rainbow. It's
 deliberately silly: glossy stretched droplets, stumps that squirt in pulses, red stump caps with a
@@ -91,7 +95,7 @@ src/
   joints.js        all joints: break-by-stretch, pose-holding muscles, fixed "stick" joints
   mannequin.js     body layout, skins, sever / damage / reattach logic
   gore.js          optional cartoon gore: droplets, stump fountains, caps, splat decals
-  life.js          personality: animated joint poses, face, moods, speech, threat sensing
+  life.js          its brain: balance, walking, getting up, crawling, fear behaviour, eyes
   rooms.js         rooms and their hazards
   fx.js            instanced particles, flashes, camera shake, 2D overlay trails
   audio.js         WebAudio synth sound effects (no audio files)
@@ -111,7 +115,7 @@ Adding a tool means adding an object to one of the `tools/*.js` arrays. `down(po
 
 ## Milestones (from the design doc)
 
-1. ~~Ragdoll mannequin with grab and fling~~
+1. ~~Ragdoll mannequin with grab and fling~~ (now an active ragdoll that walks)
 2. ~~Sever and reattach system~~
 3. ~~First 10 tools across 3 categories~~ (27 tools across 7 categories)
 4. ~~First extra room and mannequin skins~~ (5 rooms, 5 skins)

@@ -143,7 +143,7 @@ function makePartMesh(name, def, skin, index) {
     neck.userData.role = 'joint';
     neck.position.set(0, -0.1, 0);
     g.add(neck);
-    // An expressive face (animated by life.js). Also shows when the head is on backwards.
+    // Eyes (animated by life.js). Also shows when the head is on backwards.
     const face = (name, geom, material, pos, role = 'face') => {
       const m = mesh(geom, material, { cast: false });
       m.userData.role = role;
@@ -156,8 +156,6 @@ function makePartMesh(name, def, skin, index) {
     for (const [s, x] of [['L', 0.046], ['R', -0.046]]) {
       face('eye' + s, geo('sclera', () => new THREE.BoxGeometry(0.046, 0.056, 0.014)), skin.sclera, [x, 0.024, 0.101], 'sclera');
       face('pupil' + s, geo('pupil', () => new THREE.BoxGeometry(0.022, 0.028, 0.01)), skin.face, [x, 0.024, 0.11]);
-      face('brow' + s, geo('brow', () => new THREE.BoxGeometry(0.046, 0.012, 0.012)), skin.face, [x, 0.07, 0.098]);
-      face('mouth' + s, geo('mouthHalf' + s, () => new THREE.BoxGeometry(0.036, 0.013, 0.02).translate(x > 0 ? 0.018 : -0.018, 0, 0)), skin.face, [0, -0.058, 0.106]);
     }
     const nose = mesh(geo('nose', () => new THREE.ConeGeometry(0.018, 0.05, 4).rotateX(Math.PI / 2)), skin.body(index));
     nose.userData.role = 'body';
@@ -202,10 +200,6 @@ export class Mannequin {
     this.game = game;
     this.parts = [];
     this.skinId = 'wood';
-    this.useStand = true;
-    this.stand = null;
-    this.standMesh = this.makeStandMesh();
-    game.scene.add(this.standMesh);
     this.steps = 0;
   }
 
@@ -213,27 +207,9 @@ export class Mannequin {
     return SKINS[this.skinId];
   }
 
-  makeStandMesh() {
-    const g = new THREE.Group();
-    const m = mat(0x2b2b33, { metalness: 0.5, roughness: 0.4 });
-    const base = mesh(new THREE.CylinderGeometry(0.28, 0.32, 0.03, 8), m);
-    base.position.y = 0.015;
-    const rod = mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.98, 6), m);
-    rod.position.y = 0.5;
-    g.add(base, rod);
-    return g;
-  }
-
   build() {
     const { physics, joints } = this.game;
     const skin = this.skin;
-    this.standMesh.visible = this.useStand;
-    if (this.useStand) {
-      this.stand = physics.create({
-        body: RAPIER.RigidBodyDesc.fixed().setTranslation(0, 1.0, 0),
-        kind: 'stand',
-      });
-    }
     const byName = {};
     let i = 0;
     for (const [name, def] of Object.entries(P)) {
@@ -274,19 +250,6 @@ export class Mannequin {
         name,
       });
     }
-    if (this.stand) {
-      joints.create({
-        a: this.stand,
-        b: byName.pelvis,
-        anchorA: { x: 0, y: 0, z: 0 },
-        anchorB: { x: 0, y: 0, z: 0 },
-        kind: 'stand',
-        strength: 3,
-        holdMul: 1.6,
-        breakDist: 0.25,
-        name: 'stand',
-      });
-    }
     this.byName = byName;
     this.game.life?.onBuild();
   }
@@ -295,8 +258,6 @@ export class Mannequin {
     const { physics } = this.game;
     for (const e of this.parts) physics.remove(e);
     this.parts = [];
-    if (this.stand) physics.remove(this.stand);
-    this.stand = null;
   }
 
   reset() {
@@ -475,7 +436,7 @@ export class Mannequin {
       if ([...this.game.joints.list].some((j) => j.name === name)) continue;
       const pd = P[parent];
       const local = new THREE.Vector3(w[0] - pd.pos[0], w[1] - pd.pos[1], w[2] - pd.pos[2]);
-      if (local.distanceTo(anchorA) > 0.09) continue;
+      if (local.distanceTo(anchorA) > 0.13) continue;
       const ra = c.to.body.rotation();
       const rb = c.from.body.rotation();
       const rel = new THREE.Quaternion(ra.x, ra.y, ra.z, ra.w).invert().multiply(new THREE.Quaternion(rb.x, rb.y, rb.z, rb.w));

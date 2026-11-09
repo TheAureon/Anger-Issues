@@ -210,7 +210,6 @@ export function makeGuillotine(game, at) {
     const bottom = y - 0.14;
     const prevBottom = prev - 0.14;
     for (const j of [...game.joints.list]) {
-      if (j.kind === 'stand') continue;
       game.joints.worldAnchor(j, 'b', tmp);
       if (tmp.y > prevBottom + 0.05 || tmp.y < bottom - 0.05) continue;
       tmp.sub(center);

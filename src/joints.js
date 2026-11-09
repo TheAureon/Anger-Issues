@@ -15,7 +15,7 @@ export const STIFFNESS = {
 };
 
 /**
- * Manages every joint in the sandbox: mannequin joints, the stand,
+ * Manages every joint in the sandbox: mannequin joints,
  * glue, and stuck-on props (arrows, rockets, dynamite).
  *
  * Rapier gives us ball/fixed joints. On top of that every "hold" joint gets a
