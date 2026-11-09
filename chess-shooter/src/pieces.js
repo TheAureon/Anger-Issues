@@ -1,12 +1,30 @@
 // Low-poly chess pieces, each holding a gun. Pieces face -Z (toward Black) when rotation.y = 0.
 import * as THREE from 'three';
+import { PIECE_SKINS, GUN_SKINS, applySpec } from './skins.js';
 
-export const PALETTE = {
-  w: { body: 0xeee3c8, trim: 0xc99a3e },
-  b: { body: 0x2e2b36, trim: 0xb8382e },
-};
 const GUN_METAL = new THREE.MeshStandardMaterial({ color: 0x2a2d33, roughness: 0.45, metalness: 0.6, flatShading: true });
 const GUN_WOOD = new THREE.MeshStandardMaterial({ color: 0x6b4426, roughness: 0.8, flatShading: true });
+
+// Current skins (set from the shop). Gun materials are shared, so changing them restyles every gun.
+let pieceSkin = PIECE_SKINS[0];
+let gunSkin = GUN_SKINS[0];
+let envMap = null;
+export function setEnvMap(tex) {
+  envMap = tex;
+}
+export function setPieceSkin(skin) {
+  pieceSkin = skin;
+}
+export function setGunSkin(skin) {
+  gunSkin = skin;
+  applySpec(GUN_METAL, skin.metal, envMap);
+  applySpec(GUN_WOOD, skin.grip, envMap);
+}
+const skinned = (spec) => {
+  const m = new THREE.MeshStandardMaterial({ flatShading: true });
+  applySpec(m, spec, envMap);
+  return m;
+};
 
 const SEG = 8;
 const v2 = (pts) => pts.map(([r, y]) => new THREE.Vector2(r, y));
@@ -132,8 +150,8 @@ const GRIP_RADIUS = { p: 0.16, n: 0.2, b: 0.16, r: 0.22, q: 0.17, k: 0.18 };
 
 export function buildPiece(type, color, dims) {
   const root = new THREE.Group(); // positioned on the board, rotated to face its target
-  const mat = new THREE.MeshStandardMaterial({ color: PALETTE[color].body, roughness: 0.62, metalness: 0.04, flatShading: true });
-  const trim = new THREE.MeshStandardMaterial({ color: PALETTE[color].trim, roughness: 0.5, metalness: 0.2, flatShading: true });
+  const mat = skinned(pieceSkin[color].body);
+  const trim = skinned(pieceSkin[color].trim);
   const body = bodyFor(type, mat, trim);
   root.add(body);
   const gun = buildGun(type, trim);
@@ -145,13 +163,14 @@ export function buildPiece(type, color, dims) {
   return root;
 }
 
-// First-person gun shown at the bottom right of the screen in POV mode. Uses matte copies of the
-// materials: the view pass has no environment map, so metallic surfaces would render black.
+// First-person gun shown at the bottom right of the screen in POV mode, in the current gun skin.
+// The standard finish is drawn a little lighter so it doesn't read as a black blob up close.
 export function buildViewGun(type, color) {
-  const trim = new THREE.MeshStandardMaterial({ color: PALETTE[color].trim, roughness: 0.5, flatShading: true });
+  const trim = skinned({ ...pieceSkin[color].trim, m: 0 });
   const g = buildGun(type, trim, 1);
-  const metal = new THREE.MeshStandardMaterial({ color: 0x4a4f58, roughness: 0.55, metalness: 0.1, flatShading: true });
-  const wood = new THREE.MeshStandardMaterial({ color: 0x8a5a33, roughness: 0.8, flatShading: true });
+  const std = gunSkin === GUN_SKINS[0];
+  const metal = skinned(std ? { c: 0x4a4f58, r: 0.55, m: 0.1 } : gunSkin.metal);
+  const wood = skinned(std ? { c: 0x8a5a33, r: 0.8 } : gunSkin.grip);
   g.traverse((o) => {
     if (!o.isMesh) return;
     o.castShadow = false;

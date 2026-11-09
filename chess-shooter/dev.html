@@ -67,6 +67,7 @@
         <button class="menu-btn hidden" id="btn-continue"><b>Continue</b><span>Back to your game</span></button>
         <button class="menu-btn" id="btn-vs-ai"><b>Play vs Computer</b><span>Four difficulty levels</span></button>
         <button class="menu-btn" id="btn-vs-local"><b>Pass &amp; Play</b><span>Two players on one screen</span></button>
+        <button class="menu-btn" id="btn-shop"><b>Shop</b><span id="shop-menu-sub">Spend XP on skins</span></button>
         <button class="menu-btn" id="btn-badges"><b>Badges &amp; Stats</b><span id="badge-count">Achievements and your record</span></button>
         <button class="menu-btn" id="btn-howto"><b>How to Play</b><span>Rules and controls</span></button>
         <button class="menu-btn" id="btn-settings"><b>Settings</b><span>Music, sound, camera</span></button>
@@ -101,6 +102,20 @@
         </div>
         <button id="btn-start" class="primary">Start</button>
         <button class="secondary" id="btn-setup-back">Back</button>
+      </div>
+    </div>
+
+    <!-- Shop: the panel sits on the left so the board behind shows a live preview -->
+    <div id="shop" class="overlay shop hidden">
+      <div class="panel">
+        <div class="shop-head">
+          <h2>Shop</h2>
+          <div class="wallet">💰 <b id="shop-balance">0</b> XP</div>
+        </div>
+        <p class="sub small-print">Click a skin to preview it on the board. Spending XP never lowers your level or rank.</p>
+        <div class="tabs" id="shop-tabs"></div>
+        <div class="shop-grid" id="shop-grid"></div>
+        <button class="primary" id="btn-shop-close">Done</button>
       </div>
     </div>
 

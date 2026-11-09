@@ -1,5 +1,6 @@
 // The battlefield: a low-poly board on a plateau, with rocks, pines and a sky dome.
 import * as THREE from 'three';
+import { applySpec } from './skins.js';
 
 const flat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.85, flatShading: true, ...extra });
 
@@ -35,6 +36,7 @@ export function buildWorld(scene) {
       m.position.set(f - 3.5, -0.1, 3.5 - r);
       m.receiveShadow = true;
       m.userData.baseColor = m.material.color.clone();
+      m.userData.light = light;
       scene.add(m);
       tiles[r * 8 + f] = m;
     }
@@ -171,5 +173,14 @@ export function buildWorld(scene) {
     scene.add(cl);
   }
 
-  return { tiles, sun };
+  return { tiles, sun, frameMat };
+}
+
+// Restyle the board for a shop skin. Tiles keep their own materials; refresh() tints from baseColor.
+export function applyBoardSkin(world, skin) {
+  for (const t of world.tiles) {
+    applySpec(t.material, t.userData.light ? skin.light : skin.dark);
+    t.userData.baseColor.copy(t.material.color);
+  }
+  applySpec(world.frameMat, skin.frame);
 }

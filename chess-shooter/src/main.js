@@ -3,8 +3,10 @@ import * as THREE from 'three';
 import './style.css';
 import * as R from './rules.js';
 import { chooseAction, DIFFICULTIES } from './ai.js';
-import { buildPiece, buildViewGun } from './pieces.js';
-import { buildWorld } from './world.js';
+import { buildPiece, buildViewGun, setEnvMap, setPieceSkin, setGunSkin } from './pieces.js';
+import { CATEGORIES, findSkin, swatches } from './skins.js';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { buildWorld, applyBoardSkin } from './world.js';
 import { Fx } from './fx.js';
 import * as sfx from './audio.js';
 import { Minimap } from './minimap.js';
@@ -33,7 +35,10 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.03, 220);
 camera.position.set(0, 9, 10);
 camera.lookAt(0, 0, 0);
-const { tiles } = buildWorld(scene);
+const world = buildWorld(scene);
+const { tiles } = world;
+// Reflections for metallic skins (chrome, gold): a small studio environment.
+setEnvMap(new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture);
 const fx = new Fx(scene);
 
 // First-person gun, drawn in its own pass on top of the world.
@@ -843,6 +848,7 @@ window.addEventListener('keydown', (e) => {
   if (k === 'escape') {
     // Close the topmost panel first.
     for (const id of ['promo', 'help', 'settings', 'badges']) {
+      if (id === 'badges' && !$('shop').classList.contains('hidden')) return closeShop();
       if (id !== 'promo' && !$(id).classList.contains('hidden')) return closeOverlay(id);
     }
     if (screen === 'game') return showScreen('pause');
@@ -881,7 +887,7 @@ function showScreen(name) {
   screen = name;
   for (const id of SCREENS) $(id).classList.toggle('hidden', id !== name);
   $('hud').classList.toggle('hidden', name !== 'game' && name !== 'pause' && name !== 'over');
-  paused = name === 'pause';
+  paused = name !== 'game' && name !== 'over';
   $('btn-continue').classList.toggle('hidden', !(started && st && !st.result));
   if (name === 'pause') {
     const who = vsAI ? `vs ${DIFFICULTIES[difficulty].label}, you play ${COLOR_NAME[human]}` : 'pass & play';
@@ -1087,6 +1093,7 @@ function renderProfile() {
   $('pf-xp').textContent = `${L.into} / ${L.need} XP`;
   $('pf-badges').textContent = `🏅 ${unlocked}/${BADGES.length}`;
   $('badge-count').textContent = `${unlocked} of ${BADGES.length} unlocked`;
+  $('shop-menu-sub').textContent = `💰 ${progress.balance} XP to spend on skins`;
 }
 
 function renderBadges() {
@@ -1096,7 +1103,7 @@ function renderBadges() {
   $('bd-level').textContent = L.level;
   $('bd-rank').textContent = L.rank;
   $('bd-bar').style.width = `${L.frac * 100}%`;
-  $('bd-xp').textContent = `${p.xp} XP total`;
+  $('bd-xp').textContent = `${p.xp} XP earned · 💰 ${progress.balance} to spend`;
   $('bd-next').textContent = `${L.need - L.into} XP to level ${L.level + 1}`;
   const acc = s.shots ? Math.round((s.hits / s.shots) * 100) : 0;
   const stats = [
@@ -1110,7 +1117,7 @@ function renderBadges() {
     const at = p.badges[b.id];
     let bar = '';
     if (b.progress && !at) {
-      const [cur, goal] = b.progress(s);
+      const [cur, goal] = b.progress(s, p);
       bar = `<div class="mini"><div style="width:${Math.min(100, (cur / goal) * 100)}%"></div></div><small>${Math.min(cur, goal)} / ${goal}</small>`;
     }
     const when = at ? `<small>Unlocked ${new Date(at).toLocaleDateString()}</small>` : '';
@@ -1176,9 +1183,124 @@ $('btn-badges-close').addEventListener('click', () => closeOverlay('badges'));
 $('btn-reset-progress').addEventListener('click', () => {
   if (!confirm('Reset all XP, levels, stats and badges? This can’t be undone.')) return;
   progress.reset();
+  applyEquipped();
   renderProfile();
 });
 renderProfile();
+
+// --- Shop: spend XP on skins ----------------------------------------------------------------
+
+let shopTab = 'pieces';
+const preview = {}; // category -> skin id being previewed (not bought / equipped)
+let needRebuild = false;
+
+function rebuildPieces() {
+  // Never swap meshes mid-animation: the tween would keep moving the old mesh.
+  if (tweens.length) {
+    needRebuild = true;
+    return;
+  }
+  needRebuild = false;
+  if (!st) return;
+  placeAll();
+  setViewGun();
+}
+
+function showSkin(cat, skin) {
+  if (cat === 'pieces') {
+    setPieceSkin(skin);
+    rebuildPieces();
+  } else if (cat === 'board') {
+    applyBoardSkin(world, skin);
+    if (st && started) refresh();
+  } else {
+    setGunSkin(skin);
+    setViewGun();
+  }
+}
+function applyEquipped() {
+  for (const c of CATEGORIES) showSkin(c.key, findSkin(c.key, progress.p.equipped[c.key]));
+}
+
+function renderShop() {
+  $('shop-balance').textContent = progress.balance;
+  $('shop-tabs').innerHTML = CATEGORIES.map((c) => `<button class="tab ${c.key === shopTab ? 'on' : ''}" data-tab="${c.key}">${c.label}</button>`).join('');
+  const cat = CATEGORIES.find((c) => c.key === shopTab);
+  const equipped = progress.p.equipped[shopTab];
+  $('shop-grid').innerHTML = cat.items
+    .map((sk) => {
+      const owned = progress.owns(sk);
+      const isEq = sk.id === equipped;
+      const can = progress.canBuy(sk);
+      let action;
+      if (isEq) action = '<span class="state eq">✓ Equipped</span>';
+      else if (owned) action = `<button class="act equip" data-equip="${sk.id}">Equip</button>`;
+      else if (can.ok) action = `<button class="act buy" data-buy="${sk.id}">Buy · ${sk.price} XP</button>`;
+      else action = `<span class="state locked">${sk.level && progress.level < sk.level ? '🔒 ' : ''}${can.why}</span>`;
+      const price = owned ? (sk.price ? 'Owned' : 'Free') : `${sk.price} XP${sk.level ? ` · Lv ${sk.level}` : ''}`;
+      const dots = swatches(shopTab, sk).map((c) => `<i style="background:#${c.toString(16).padStart(6, '0')}"></i>`).join('');
+      return `<div class="skin ${isEq ? 'equipped' : ''} ${preview[shopTab] === sk.id ? 'previewing' : ''} ${owned ? 'owned' : ''}" data-preview="${sk.id}">
+        <div class="sw">${dots}</div>
+        <div class="info"><b>${sk.name}</b><span>${sk.desc}</span><small>${price}</small></div>
+        <div class="buy-col">${action}</div>
+      </div>`;
+    })
+    .join('');
+}
+
+function openShop() {
+  sfx.click();
+  for (const k of Object.keys(preview)) delete preview[k];
+  renderShop();
+  $('shop').classList.remove('hidden');
+  $('main-menu').classList.add('hidden');
+}
+function closeShop() {
+  // Drop any previews of skins that weren't bought and equipped.
+  for (const c of CATEGORIES) if (preview[c.key]) showSkin(c.key, findSkin(c.key, progress.p.equipped[c.key]));
+  for (const k of Object.keys(preview)) delete preview[k];
+  $('shop').classList.add('hidden');
+  showScreen('main-menu');
+}
+
+$('shop-tabs').addEventListener('click', (e) => {
+  const t = e.target.closest('[data-tab]');
+  if (!t) return;
+  sfx.click();
+  shopTab = t.dataset.tab;
+  renderShop();
+});
+$('shop-grid').addEventListener('click', (e) => {
+  const cat = CATEGORIES.find((c) => c.key === shopTab);
+  const buyBtn = e.target.closest('[data-buy]');
+  const eqBtn = e.target.closest('[data-equip]');
+  const card = e.target.closest('[data-preview]');
+  if (buyBtn) {
+    const sk = cat.items.find((x) => x.id === buyBtn.dataset.buy);
+    if (progress.buy(sk)) {
+      progress.equip(shopTab, sk);
+      delete preview[shopTab];
+      showSkin(shopTab, sk);
+      sfx.fanfare(true);
+      renderProfile();
+    }
+  } else if (eqBtn) {
+    const sk = cat.items.find((x) => x.id === eqBtn.dataset.equip);
+    progress.equip(shopTab, sk);
+    delete preview[shopTab];
+    showSkin(shopTab, sk);
+    sfx.click();
+  } else if (card) {
+    const sk = cat.items.find((x) => x.id === card.dataset.preview);
+    preview[shopTab] = sk.id;
+    showSkin(shopTab, sk);
+    sfx.click();
+  }
+  renderShop();
+});
+$('btn-shop').addEventListener('click', openShop);
+$('btn-shop-close').addEventListener('click', closeShop);
+applyEquipped();
 
 // --- Main loop -----------------------------------------------------------------------------
 
@@ -1236,6 +1358,7 @@ function frame() {
   ringMat.color.setHSL(0.01, 1, 0.5 + Math.sin(time * 6) * 0.1);
 
   fx.update(dt);
+  if (needRebuild && tweens.length === 0) rebuildPieces();
 
   // Minimap view cone follows the camera.
   mapTimer += dt;
@@ -1260,7 +1383,7 @@ function frame() {
 }
 
 // Read-only hook for automated play-testing.
-window.__gunmate = { state: () => st, legal: () => (st ? R.legalActions(st) : []), busy: () => busy, music: sfx.music, progress: () => progress, cam: () => ({ pos: camera.position.toArray().map((v) => +v.toFixed(2)), povId, viewMode, yaw: +yaw.toFixed(2), pitch: +pitch.toFixed(2) }) };
+window.__gunmate = { state: () => st, legal: () => (st ? R.legalActions(st) : []), busy: () => busy, music: sfx.music, progress: () => progress, tile: (i) => { const m = tiles[i].material; return { c: m.color.getHexString(), e: m.emissive.getHexString(), ei: m.emissiveIntensity, r: m.roughness }; }, cam: () => ({ pos: camera.position.toArray().map((v) => +v.toFixed(2)), povId, viewMode, yaw: +yaw.toFixed(2), pitch: +pitch.toFixed(2) }) };
 
 // Show the board (slowly orbiting) behind the menu.
 st = R.newGame(R.CLASSIC);

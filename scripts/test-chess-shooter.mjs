@@ -80,3 +80,20 @@ for (const mode of [R.CLASSIC, R.MERCIZERO]) {
   ok(pr.p.badges['beat-hard'] && pr.p.badges.regicide && !pr.p.badges.untouchable && !pr.p.badges.deadeye, 'win badges (no Untouchable after friendly fire)');
   ok(sum.endXp - sum.startXp === pr.p.xp && pr.p.stats.wins === 1 && pr.p.stats.kills === 2, `game XP ${pr.p.xp}, level ${pr.level}, stats ${JSON.stringify(pr.p.stats)}`);
 }
+
+// Shop: spending XP
+{
+  const P = await import('../chess-shooter/src/progress.js');
+  const S = await import('../chess-shooter/src/skins.js');
+  const pr = new P.Progress(() => {});
+  pr.p.xp = 600; // level 4
+  const neon = S.PIECE_SKINS.find((s) => s.id === 'pieces-neon'); // 750 XP, level 4
+  const camo = S.PIECE_SKINS.find((s) => s.id === 'pieces-camo'); // 350 XP
+  const chrome = S.PIECE_SKINS.find((s) => s.id === 'pieces-chrome'); // level 6
+  ok(!pr.canBuy(neon).ok && /more XP/.test(pr.canBuy(neon).why), 'cannot afford: ' + pr.canBuy(neon).why);
+  ok(!pr.canBuy(chrome).ok && /level 6/.test(pr.canBuy(chrome).why), 'level-locked: ' + pr.canBuy(chrome).why);
+  ok(pr.buy(camo) && pr.owns(camo) && pr.p.spent === 350, 'buy camo spends 350');
+  ok(pr.level === P.levelOf(pr.p.xp) && pr.level >= 4 && pr.balance === pr.p.xp - 350, `level kept (${pr.level}), balance ${pr.balance} (incl. Fashionista bonus)`);
+  ok(!pr.buy(camo) && pr.p.spent === 350, 'cannot buy twice');
+  ok(pr.equip('pieces', camo) && pr.p.equipped.pieces === 'pieces-camo' && !pr.equip('pieces', neon), 'equip only owned skins');
+}

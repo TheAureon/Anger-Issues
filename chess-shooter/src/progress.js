@@ -1,5 +1,7 @@
 // Player profile: XP, levels, ranks, lifetime stats and badges. Saved in localStorage on this device.
 
+import { DEFAULT_EQUIPPED } from './skins.js';
+
 const KEY = 'gunmate-profile';
 
 export const RANKS = [
@@ -46,6 +48,8 @@ export const BADGES = [
   { id: 'beat-hard', icon: '🥇', name: 'Sniper Duel', desc: 'Beat Sniper.' },
   { id: 'beat-brutal', icon: '🏆', name: 'Warlord Slayer', desc: 'Beat Warlord.' },
   { id: 'hot-seat', icon: '🛋️', name: 'Hot Seat', desc: 'Finish a Pass & Play game.' },
+  { id: 'shopper', icon: '🛍️', name: 'Fashionista', desc: 'Buy your first skin in the shop.' },
+  { id: 'collector', icon: '🎨', name: 'Collector', desc: 'Own 10 skins.', progress: (s, p) => [Object.keys(p.owned).length, 10] },
   { id: 'veteran', icon: '🎖️', name: 'Veteran', desc: 'Finish 10 games.', progress: (s) => [s.games, 10] },
   { id: 'centurion', icon: '💯', name: 'Centurion', desc: 'Get 100 kills in total.', progress: (s) => [s.kills, 100] },
   { id: 'marksman', icon: '🔫', name: 'Trigger Happy', desc: 'Fire 250 shots in total.', progress: (s) => [s.shots, 250] },
@@ -54,7 +58,10 @@ const BY_ID = Object.fromEntries(BADGES.map((b) => [b.id, b]));
 
 function blank() {
   return {
-    xp: 0,
+    xp: 0, // lifetime XP: sets your level and never goes down
+    spent: 0, // XP spent in the shop
+    owned: {}, // skin id -> true (free skins are always owned)
+    equipped: { ...DEFAULT_EQUIPPED },
     badges: {}, // id -> unlock timestamp
     stats: { games: 0, wins: 0, losses: 0, draws: 0, kills: 0, deaths: 0, shots: 0, hits: 0, bestStreak: 0, streak: 0 },
   };
@@ -66,7 +73,14 @@ export function load() {
     if (!raw) return blank();
     const p = JSON.parse(raw);
     const b = blank();
-    return { ...b, ...p, stats: { ...b.stats, ...(p.stats || {}) }, badges: p.badges || {} };
+    return {
+      ...b,
+      ...p,
+      stats: { ...b.stats, ...(p.stats || {}) },
+      badges: p.badges || {},
+      owned: p.owned || {},
+      equipped: { ...DEFAULT_EQUIPPED, ...(p.equipped || {}) },
+    };
   } catch {
     return blank();
   }
@@ -96,6 +110,36 @@ export class Progress {
     return levelOf(this.p.xp);
   }
 
+  // --- Shop ------------------------------------------------------------------------------
+
+  get balance() {
+    return this.p.xp - this.p.spent;
+  }
+  owns(skin) {
+    return skin.price === 0 || !!this.p.owned[skin.id];
+  }
+  canBuy(skin) {
+    if (this.owns(skin)) return { ok: false, why: 'owned' };
+    if (skin.level && this.level < skin.level) return { ok: false, why: `Reach level ${skin.level}` };
+    if (this.balance < skin.price) return { ok: false, why: `Need ${skin.price - this.balance} more XP` };
+    return { ok: true };
+  }
+  buy(skin) {
+    if (!this.canBuy(skin).ok) return false;
+    this.p.spent += skin.price;
+    this.p.owned[skin.id] = true;
+    this.unlock('shopper');
+    this.checkCounters();
+    this.save();
+    return true;
+  }
+  equip(cat, skin) {
+    if (!this.owns(skin)) return false;
+    this.p.equipped[cat] = skin.id;
+    this.save();
+    return true;
+  }
+
   addXp(amount, label) {
     if (amount <= 0) return;
     const before = this.level;
@@ -117,7 +161,7 @@ export class Progress {
   checkCounters() {
     for (const b of BADGES) {
       if (!b.progress || this.p.badges[b.id]) continue;
-      const [cur, goal] = b.progress(this.p.stats);
+      const [cur, goal] = b.progress(this.p.stats, this.p);
       if (cur >= goal) this.unlock(b.id);
     }
   }

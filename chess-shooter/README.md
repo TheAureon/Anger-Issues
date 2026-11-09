@@ -66,17 +66,32 @@ badge is worth another 50 XP.
 
 Levels need 100, 300, 600, 1000… XP in total, and every two levels give a new rank, from Private up
 to Grandmaster. Your level, XP bar and badge count are on the main menu; **Badges & Stats** shows all
-27 badges (locked ones say how to get them, counters show progress) plus your record: games, wins,
+29 badges (locked ones say how to get them, counters show progress) plus your record: games, wins,
 kills, accuracy and best win streak. The game-over screen lists what you earned that game.
 
 Progress is saved in the browser on this device. Settings has a reset button.
+
+## Shop
+
+Spend XP on cosmetic skins from the main menu's **Shop**. Your level is based on all the XP you've
+ever earned, so spending never lowers your level or rank; the shop uses a separate balance (earned
+minus spent). Click any skin to preview it live on the board behind the shop, then buy or equip it.
+Previews you don't buy are undone when you leave. Some premium skins also need a minimum level.
+
+| Category | Skins (price in XP, level needed) |
+| --- | --- |
+| Pieces | Classic (free), Carved Wood 150, Candy 250, Camo 350, Marble 500, Neon 750 (Lv 4), Chrome 1000 (Lv 6), Gold & Obsidian 1500 (Lv 8) |
+| Board | Walnut (free), Tournament 100, Desert 200, Marble 350, Glacier 500, Sweet Shop 500, Lava Field 900 (Lv 5) |
+| Guns | Gunmetal (free), Desert Tan 100, Tiger 250, Arctic 300, Bubblegum 300, Plasma 700 (Lv 3), Solid Gold 1200 (Lv 7) |
+
+Two shop badges: Fashionista (first purchase) and Collector (own 10 skins).
 
 Badges: First Blood, Pawn Power, Royal Revolver, Cavalry Charge (3 knight kills in a game), Max Range
 (kill from 4 squares), Long Shot (kill under 50% hit chance), Queenslayer, Lucky Stray, Oops (friendly
 fire), Bulletproof (ricochet off a king), Stormtrooper (4 misses in a row), Field Promotion, Castle
 Keep, Siege Master, Regicide, Untouchable (win losing nothing), Deadeye (win with 100% accuracy),
 Comeback Kid (win from 5+ material down), Blitz (win in 20 turns), one for beating each difficulty,
-Hot Seat, Veteran (10 games), Centurion (100 kills), Trigger Happy (250 shots).
+Hot Seat, Fashionista, Collector, Veteran (10 games), Centurion (100 kills), Trigger Happy (250 shots).
 
 ## Music
 
@@ -95,7 +110,8 @@ src/pieces.js     low-poly pieces and their guns
 src/world.js      board, plateau, trees, rocks, lights
 src/fx.js         tracers, muzzle flash, shattering pieces
 src/minimap.js    the 2D board in the corner
-src/progress.js   XP, levels, ranks, stats and badges (saved in localStorage)
+src/progress.js   XP, levels, ranks, stats, badges, shop wallet (saved in localStorage)
+src/skins.js      shop catalogue: piece, board and gun skins
 src/audio.js      synthesized sound effects
 src/music.js      procedural soundtrack (WebAudio sequencer)
 ```
