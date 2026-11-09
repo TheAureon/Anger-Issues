@@ -400,6 +400,10 @@ export class Game {
 
   onKey(e) {
     if (e.target.tagName === 'INPUT') return;
+    if (this.title?.active) {
+      if (e.key === 'Enter') this.title.play();
+      return;
+    }
     const k = e.key.toLowerCase();
     if (this.activeTool?.key?.(k)) return;
     if (k === 'escape') this.setTool(this.toolById('hand'));
@@ -513,7 +517,8 @@ export class Game {
     this.life.update(vdt);
     this.gore.update(vdt);
     this.updateHover();
-    this.controls.update();
+    if (this.title && (this.title.active || this.title.swoop)) this.title.frame(dt);
+    else this.controls.update();
     this.fx.applyShake(this.camera);
     this.renderer.render(this.scene, this.camera);
     this.fx.removeShake(this.camera);

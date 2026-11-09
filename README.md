@@ -58,6 +58,10 @@ heavy impacts, accumulated damage, blades, or being stretched apart. Every joint
 that pulls it back to its rest pose, so the figure behaves like a stiff wooden mannequin. The 🦴 button
 cycles Stiff → Loose → Ragdoll (Ragdoll switches its brain off).
 
+**Title screen:** the game opens on a title screen over the live scene. The camera slowly circles
+your mannequin as it wanders around. Name it, pick a room, skin and gore setting (they change live
+behind the menu), then press **Let it out** (or Enter) and the camera swoops into the game.
+
 **Name it:** the 🏷️ button in the top bar (or a click on the floating name tag above its head) opens
 a name box, with a 🎲 for random suggestions. The name stays over its head, even when that head is
 rolling around on its own, and it's remembered next time you play.
@@ -117,6 +121,7 @@ src/
   rooms.js         rooms and their hazards
   fx.js            instanced particles, flashes, camera shake, 2D overlay trails
   audio.js         WebAudio synth sound effects (no audio files)
+  title.js         title screen: logo, name, room/look/gore picks, orbiting camera, swoop-in
   ui.js, style.css toolbox, menus, help
   tools/           one file per category; each tool is { down, move, up, fixed, update }
 ```

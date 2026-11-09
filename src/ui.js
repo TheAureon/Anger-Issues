@@ -176,7 +176,7 @@ export class UI {
     } catch {
       /* storage unavailable */
     }
-    if (!seen) this.toggleHelp(true);
+    this.helpSeen = seen;
 
     this.update();
   }
@@ -224,10 +224,17 @@ export class UI {
     tag.style.transform = `translate(${((v.x + 1) / 2) * r.width}px, ${((1 - v.y) / 2) * r.height}px) translate(-50%, -100%)`;
   }
 
+  /** Called when the title screen hands over: first-timers get the help card. */
+  afterTitle() {
+    this.update();
+    if (!this.helpSeen) this.toggleHelp(true);
+  }
+
   toggleHelp(force) {
     const show = force ?? this.help.classList.contains('hidden');
     this.help.classList.toggle('hidden', !show);
     if (!show) {
+      this.helpSeen = true;
       try {
         localStorage.setItem('ai-help-seen', '1');
       } catch {
