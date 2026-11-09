@@ -6,7 +6,15 @@ Wreck it, rebuild it, repeat. No fail state, no timer, nothing to unlock.
 
 Built with [Three.js](https://threejs.org/) and the [Rapier](https://rapier.rs/) physics engine.
 
-## Running it
+## Playing it
+
+Open `index.html`. That's it: it's the whole game in one self-contained file (code, physics engine and
+styles inlined, no network requests), so it works by double-clicking it, from GitHub Pages, or from any
+static host.
+
+## Developing
+
+The source entry is `dev.html` (loads `src/main.js`).
 
 ```bash
 npm install
@@ -16,11 +24,14 @@ npm install
 npm run dev
 ```
 
-Then open the URL Vite prints. To build a static site (output in `dist/`, works from any sub-path):
+After changing anything in `src/`, regenerate the playable `index.html`:
 
 ```bash
 npm run build
 ```
+
+This bundles with Vite and then runs `scripts/make-playable.mjs`, which inlines everything into the root
+`index.html` (also copied to `dist/`). Commit the regenerated `index.html` along with your source changes.
 
 ## Controls
 
@@ -88,6 +99,9 @@ Everything is available from the start. No coins, no ads, no progression.
 ## Code map
 
 ```
+index.html                 generated, self-contained playable build (open this to play)
+dev.html                   development entry for Vite
+scripts/make-playable.mjs  inlines the Vite build into index.html
 src/
   main.js          boot: init Rapier, create Game + UI
   game.js          renderer, camera, input routing, fixed-step loop, props, explosions

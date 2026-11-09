@@ -1,7 +1,17 @@
 import { defineConfig } from 'vite';
 
-// Relative base so the build works from any static host path (GitHub Pages, itch.io, etc.).
+// Source entry is dev.html. `npm run build` bundles it and scripts/make-playable.mjs
+// inlines everything into the root index.html, a single file that plays anywhere
+// (double-click, GitHub Pages, any static host) with no server or build step.
 export default defineConfig({
   base: './',
-  build: { target: 'es2020', chunkSizeWarningLimit: 3000 },
+  server: { open: '/dev.html' },
+  build: {
+    target: 'es2020',
+    chunkSizeWarningLimit: 4000,
+    assetsInlineLimit: 100000000,
+    cssCodeSplit: false,
+    modulePreload: false,
+    rollupOptions: { input: 'dev.html', output: { inlineDynamicImports: true } },
+  },
 });
