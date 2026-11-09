@@ -57,6 +57,27 @@ effects volume, look sensitivity, field-of-fire tint, control hints. Choices are
 
 You can play White, Black, or let a coin toss decide.
 
+## XP, ranks and badges
+
+You earn XP for kills (pawn 5, knight/bishop 15, rook 25, queen 45, king 60, +5 for hits from 3+
+squares), promotions, and finishing games: a win is worth 60 / 120 / 180 / 300 XP against Recruit /
+Soldier / Sniper / Warlord, plus a streak bonus; draws give 40, losses 20, Pass & Play games 40. Each
+badge is worth another 50 XP.
+
+Levels need 100, 300, 600, 1000… XP in total, and every two levels give a new rank, from Private up
+to Grandmaster. Your level, XP bar and badge count are on the main menu; **Badges & Stats** shows all
+27 badges (locked ones say how to get them, counters show progress) plus your record: games, wins,
+kills, accuracy and best win streak. The game-over screen lists what you earned that game.
+
+Progress is saved in the browser on this device. Settings has a reset button.
+
+Badges: First Blood, Pawn Power, Royal Revolver, Cavalry Charge (3 knight kills in a game), Max Range
+(kill from 4 squares), Long Shot (kill under 50% hit chance), Queenslayer, Lucky Stray, Oops (friendly
+fire), Bulletproof (ricochet off a king), Stormtrooper (4 misses in a row), Field Promotion, Castle
+Keep, Siege Master, Regicide, Untouchable (win losing nothing), Deadeye (win with 100% accuracy),
+Comeback Kid (win from 5+ material down), Blitz (win in 20 turns), one for beating each difficulty,
+Hot Seat, Veteran (10 games), Centurion (100 kills), Trigger Happy (250 shots).
+
 ## Music
 
 The soundtrack is generated live in code (no audio files): a looping D-minor march. It's calm pads
@@ -74,6 +95,7 @@ src/pieces.js     low-poly pieces and their guns
 src/world.js      board, plateau, trees, rocks, lights
 src/fx.js         tracers, muzzle flash, shattering pieces
 src/minimap.js    the 2D board in the corner
+src/progress.js   XP, levels, ranks, stats and badges (saved in localStorage)
 src/audio.js      synthesized sound effects
 src/music.js      procedural soundtrack (WebAudio sequencer)
 ```

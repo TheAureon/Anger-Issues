@@ -8,6 +8,7 @@ import { buildWorld } from './world.js';
 import { Fx } from './fx.js';
 import * as sfx from './audio.js';
 import { Minimap } from './minimap.js';
+import { Progress, BADGES, BADGE_XP, xpForLevel, levelOf, rankOf } from './progress.js';
 
 const $ = (id) => document.getElementById(id);
 const COLOR_NAME = { w: 'White', b: 'Black' };
@@ -483,7 +484,7 @@ function onSquare(sq, aim = null) {
   const mv = acts.find((a) => a.kind === 'move' && a.to === sq);
   if (mv) return doMove(mv, true);
   const sh = acts.find((a) => a.kind === 'shoot' && a.to === sq);
-  if (sh) return doShoot(sh, aim || R.aimCenter(st, sq), 1);
+  if (sh) return doShoot(sh, aim || R.aimCenter(st, sq), 1, true);
   const why = explain(from, sq);
   if (why) status(why, 'warn');
 }
@@ -533,6 +534,7 @@ async function doMove(a, byHuman) {
   await Promise.all(jobs);
   if (tok !== gameToken) return;
   sfx.step();
+  progress.onMove({ mine: byHuman, castle: !!a.castle, promo: !!a.promo });
   const next = R.applyRaw(st, a);
   if (a.promo) {
     // Swap the mesh for the promoted piece.
@@ -562,12 +564,13 @@ function turnTo(g, target, dur = 0.18) {
   return tween(dur, (k) => (g.rotation.y = a + d * ease(k)));
 }
 
-async function doShoot(a, aim, spreadMul) {
+async function doShoot(a, aim, spreadMul, mine = false) {
   const tok = gameToken;
   busy = true;
   refresh();
   const shooter = st.board[a.from];
   const g = groups.get(shooter.id);
+  const chance = mine ? R.hitChance(st, a.from, a.to, aim, 120, spreadMul) : 1;
   const res = R.simulateShot(st, a.from, aim, Math.random, spreadMul);
   const end = new THREE.Vector3(res.end.x, res.end.y, res.end.z);
   await turnTo(g, faceYaw(g.position, res.end.x, res.end.z));
@@ -592,6 +595,18 @@ async function doShoot(a, aim, spreadMul) {
 
   let kill = null;
   let victimDesc = '';
+  const hitPiece = res.hit != null ? st.board[res.hit] : null;
+  progress.onShot({
+    mine,
+    shooterType: shooter.type,
+    intended: a.to,
+    victim: hitPiece,
+    victimSq: res.hit,
+    friendly: !!hitPiece && hitPiece.color === shooter.color,
+    ricochet: !!hitPiece && hitPiece.type === 'k' && st.mode === R.CLASSIC,
+    distance: Math.max(Math.abs(R.fileOf(a.to) - R.fileOf(a.from)), Math.abs(R.rankOf(a.to) - R.rankOf(a.from))),
+    chance,
+  });
   if (res.hit != null) {
     const victim = st.board[res.hit];
     if (victim.type === 'k' && st.mode === R.CLASSIC) {
@@ -637,6 +652,11 @@ function commit(next, lastInfo, tok = gameToken) {
   if (tok !== gameToken) return; // a new game started while this action was animating
   st = next;
   last = lastInfo;
+  if (vsAI) {
+    let diff = 0;
+    for (const p of st.board) if (p && p.type !== 'k') diff += (p.color === human ? 1 : -1) * R.VALUE[p.type];
+    progress.onMaterial(diff);
+  }
   const result = R.judge(st);
   if (result) {
     st.result = result;
@@ -701,6 +721,7 @@ function gameOver(result) {
   $('over-title').textContent = title;
   $('over-reason').textContent = result.reason[0].toUpperCase() + result.reason.slice(1) + '.';
   sfx.fanfare(!vsAI || won === human);
+  renderSummary(progress.endGame(result));
   const tok = gameToken;
   setTimeout(() => {
     if (tok === gameToken && screen === 'game') showScreen('over');
@@ -727,6 +748,7 @@ function startGame() {
   povId = null;
   viewMode = 'pov';
   started = true;
+  progress.beginGame({ vsAI, human, difficulty, mode: chosenMode });
   showScreen('game');
   setPov(remembered[viewerColor()]);
   const modeLine = chosenMode === R.CLASSIC ? 'Classic: siege the king' : 'MerciZero: shoot the king';
@@ -820,7 +842,7 @@ window.addEventListener('keydown', (e) => {
   if (screen === 'title') return leaveTitle();
   if (k === 'escape') {
     // Close the topmost panel first.
-    for (const id of ['promo', 'help', 'settings']) {
+    for (const id of ['promo', 'help', 'settings', 'badges']) {
       if (id !== 'promo' && !$(id).classList.contains('hidden')) return closeOverlay(id);
     }
     if (screen === 'game') return showScreen('pause');
@@ -865,6 +887,7 @@ function showScreen(name) {
     const who = vsAI ? `vs ${DIFFICULTIES[difficulty].label}, you play ${COLOR_NAME[human]}` : 'pass & play';
     $('pause-info').textContent = `${st.mode === R.CLASSIC ? 'Classic' : 'MerciZero'} · ${who} · turn ${Math.floor(st.ply / 2) + 1}`;
   }
+  if (name === 'main-menu') renderProfile();
   updateMood();
 }
 function closeOverlay(id) {
@@ -1012,6 +1035,151 @@ window.addEventListener('resize', () => {
   drawMap();
 });
 
+// --- XP, levels and badges UI --------------------------------------------------------------
+
+const progress = new Progress((e) => {
+  if (e.type === 'xp') xpPop(e.amount, e.label);
+  else if (e.type === 'badge') toast(`<span class="t-icon">${e.badge.icon}</span><div><small>Badge unlocked · +${BADGE_XP} XP</small><b>${e.badge.name}</b><span>${e.badge.desc}</span></div>`, 'badge');
+  else if (e.type === 'level') {
+    toast(`<span class="t-icon lvl">${e.level}</span><div><small>Level up!</small><b>${e.rank}</b><span>You reached level ${e.level}.</span></div>`, 'level');
+    sfx.fanfare(true);
+  }
+});
+
+function toast(html, cls) {
+  const el = document.createElement('div');
+  el.className = `toast ${cls}`;
+  el.innerHTML = html;
+  $('toasts').appendChild(el);
+  sfx.click();
+  setTimeout(() => el.classList.add('out'), 3800);
+  setTimeout(() => el.remove(), 4400);
+}
+
+// Little "+15 XP" floaters during play.
+let popStack = 0;
+function xpPop(amount, label) {
+  if (screen !== 'game' && screen !== 'over') return;
+  const el = document.createElement('div');
+  el.className = 'xp-pop';
+  el.style.top = `${30 + popStack * 5}%`;
+  el.innerHTML = `<b>+${amount} XP</b> ${label}`;
+  document.body.appendChild(el);
+  popStack++;
+  setTimeout(() => popStack--, 900);
+  setTimeout(() => el.remove(), 1900);
+}
+
+function levelInfo(xp) {
+  const level = levelOf(xp);
+  const lo = xpForLevel(level);
+  const hi = xpForLevel(level + 1);
+  return { level, rank: rankOf(level), into: xp - lo, need: hi - lo, frac: (xp - lo) / (hi - lo) };
+}
+
+function renderProfile() {
+  const p = progress.p;
+  const L = levelInfo(p.xp);
+  const unlocked = Object.keys(p.badges).length;
+  $('pf-level').textContent = L.level;
+  $('pf-rank').textContent = L.rank;
+  $('pf-bar').style.width = `${L.frac * 100}%`;
+  $('pf-xp').textContent = `${L.into} / ${L.need} XP`;
+  $('pf-badges').textContent = `🏅 ${unlocked}/${BADGES.length}`;
+  $('badge-count').textContent = `${unlocked} of ${BADGES.length} unlocked`;
+}
+
+function renderBadges() {
+  const p = progress.p;
+  const s = p.stats;
+  const L = levelInfo(p.xp);
+  $('bd-level').textContent = L.level;
+  $('bd-rank').textContent = L.rank;
+  $('bd-bar').style.width = `${L.frac * 100}%`;
+  $('bd-xp').textContent = `${p.xp} XP total`;
+  $('bd-next').textContent = `${L.need - L.into} XP to level ${L.level + 1}`;
+  const acc = s.shots ? Math.round((s.hits / s.shots) * 100) : 0;
+  const stats = [
+    ['Games', s.games], ['Wins', s.wins], ['Losses', s.losses], ['Draws', s.draws],
+    ['Kills', s.kills], ['Shots', s.shots], ['Accuracy', `${acc}%`], ['Best streak', s.bestStreak],
+  ];
+  $('bd-stats').innerHTML = stats.map(([k, v]) => `<div><b>${v}</b><span>${k}</span></div>`).join('');
+  const unlocked = Object.keys(p.badges).length;
+  $('bd-count').textContent = `Badges · ${unlocked} of ${BADGES.length}`;
+  $('bd-grid').innerHTML = BADGES.map((b) => {
+    const at = p.badges[b.id];
+    let bar = '';
+    if (b.progress && !at) {
+      const [cur, goal] = b.progress(s);
+      bar = `<div class="mini"><div style="width:${Math.min(100, (cur / goal) * 100)}%"></div></div><small>${Math.min(cur, goal)} / ${goal}</small>`;
+    }
+    const when = at ? `<small>Unlocked ${new Date(at).toLocaleDateString()}</small>` : '';
+    return `<div class="badge ${at ? 'got' : 'locked'}"><div class="b-icon">${b.icon}</div><div><b>${b.name}</b><span>${b.desc}</span>${bar}${when}</div></div>`;
+  }).join('');
+}
+
+function renderSummary(sum) {
+  $('over-xp').classList.toggle('hidden', !sum);
+  if (!sum) return;
+  // Merge repeated lines ("Killed a pawn ×3").
+  const lines = [];
+  for (const l of sum.xp) {
+    const same = lines.find((x) => x.label === l.label);
+    if (same) {
+      same.amount += l.amount;
+      same.n++;
+    } else lines.push({ ...l, n: 1 });
+  }
+  $('ov-lines').innerHTML =
+    lines.map((l) => `<li><span>${l.label}${l.n > 1 ? ` ×${l.n}` : ''}</span><b>+${l.amount}</b></li>`).join('') ||
+    '<li><span>No XP this game</span><b>+0</b></li>';
+  const gained = sum.endXp - sum.startXp;
+  $('ov-total').textContent = `+${gained} XP` + (sum.endLevel > sum.startLevel ? ` · Level up! ${sum.startLevel} → ${sum.endLevel}` : '');
+  $('ov-badges').innerHTML = sum.badges
+    .map((id) => {
+      const b = BADGES.find((x) => x.id === id);
+      return `<span class="chip" title="${b.desc}">${b.icon} ${b.name}</span>`;
+    })
+    .join('');
+  // Animate the bar from where it started this game.
+  const from = levelInfo(sum.startXp);
+  const to = levelInfo(sum.endXp);
+  $('ov-level').textContent = from.level;
+  $('ov-rank').textContent = from.rank;
+  const bar = $('ov-bar');
+  bar.style.transition = 'none';
+  bar.style.width = `${from.frac * 100}%`;
+  setTimeout(() => {
+    bar.style.transition = 'width 1.2s ease';
+    bar.style.width = to.level > from.level ? '100%' : `${to.frac * 100}%`;
+    if (to.level > from.level) {
+      setTimeout(() => {
+        $('ov-level').textContent = to.level;
+        $('ov-rank').textContent = to.rank;
+        bar.style.transition = 'none';
+        bar.style.width = '0%';
+        setTimeout(() => {
+          bar.style.transition = 'width 0.8s ease';
+          bar.style.width = `${to.frac * 100}%`;
+        }, 30);
+      }, 1250);
+    }
+  }, 1300);
+}
+
+$('btn-badges').addEventListener('click', () => {
+  renderBadges();
+  $('badges').classList.remove('hidden');
+});
+$('profile-card').addEventListener('click', () => $('btn-badges').click());
+$('btn-badges-close').addEventListener('click', () => closeOverlay('badges'));
+$('btn-reset-progress').addEventListener('click', () => {
+  if (!confirm('Reset all XP, levels, stats and badges? This can’t be undone.')) return;
+  progress.reset();
+  renderProfile();
+});
+renderProfile();
+
 // --- Main loop -----------------------------------------------------------------------------
 
 const clock = new THREE.Clock();
@@ -1092,7 +1260,7 @@ function frame() {
 }
 
 // Read-only hook for automated play-testing.
-window.__gunmate = { state: () => st, legal: () => (st ? R.legalActions(st) : []), busy: () => busy, music: sfx.music, cam: () => ({ pos: camera.position.toArray().map((v) => +v.toFixed(2)), povId, viewMode, yaw: +yaw.toFixed(2), pitch: +pitch.toFixed(2) }) };
+window.__gunmate = { state: () => st, legal: () => (st ? R.legalActions(st) : []), busy: () => busy, music: sfx.music, progress: () => progress, cam: () => ({ pos: camera.position.toArray().map((v) => +v.toFixed(2)), povId, viewMode, yaw: +yaw.toFixed(2), pitch: +pitch.toFixed(2) }) };
 
 // Show the board (slowly orbiting) behind the menu.
 st = R.newGame(R.CLASSIC);

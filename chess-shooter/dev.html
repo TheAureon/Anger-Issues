@@ -56,9 +56,18 @@
     <div id="main-menu" class="screen side hidden">
       <div class="menu-col">
         <div class="menu-logo">GUNMATE</div>
+        <button class="profile" id="profile-card" title="Badges and stats">
+          <div class="lvl" id="pf-level">1</div>
+          <div class="pf-main">
+            <div class="pf-rank" id="pf-rank">Private</div>
+            <div class="xpbar"><div id="pf-bar"></div></div>
+            <div class="pf-sub"><span id="pf-xp">0 / 100 XP</span><span id="pf-badges">0 badges</span></div>
+          </div>
+        </button>
         <button class="menu-btn hidden" id="btn-continue"><b>Continue</b><span>Back to your game</span></button>
         <button class="menu-btn" id="btn-vs-ai"><b>Play vs Computer</b><span>Four difficulty levels</span></button>
         <button class="menu-btn" id="btn-vs-local"><b>Pass &amp; Play</b><span>Two players on one screen</span></button>
+        <button class="menu-btn" id="btn-badges"><b>Badges &amp; Stats</b><span id="badge-count">Achievements and your record</span></button>
         <button class="menu-btn" id="btn-howto"><b>How to Play</b><span>Rules and controls</span></button>
         <button class="menu-btn" id="btn-settings"><b>Settings</b><span>Music, sound, camera</span></button>
         <button class="menu-btn small" id="btn-to-title">Back to title</button>
@@ -95,6 +104,24 @@
       </div>
     </div>
 
+    <!-- Badges & stats -->
+    <div id="badges" class="overlay hidden">
+      <div class="panel wide">
+        <div class="badges-head">
+          <div class="lvl big" id="bd-level">1</div>
+          <div class="pf-main">
+            <h2 id="bd-rank">Private</h2>
+            <div class="xpbar"><div id="bd-bar"></div></div>
+            <div class="pf-sub"><span id="bd-xp"></span><span id="bd-next"></span></div>
+          </div>
+        </div>
+        <div class="stats" id="bd-stats"></div>
+        <div class="row-label" id="bd-count"></div>
+        <div class="badge-grid" id="bd-grid"></div>
+        <button class="primary" id="btn-badges-close">Close</button>
+      </div>
+    </div>
+
     <!-- Settings -->
     <div id="settings" class="overlay hidden">
       <div class="panel small">
@@ -104,6 +131,7 @@
         <label class="setting"><span>Look sensitivity</span><input type="range" id="sens" min="30" max="250" /></label>
         <label class="setting check"><span>Show field of fire</span><input type="checkbox" id="opt-cover" /></label>
         <label class="setting check"><span>Show control hints</span><input type="checkbox" id="opt-hints" /></label>
+        <button class="secondary danger" id="btn-reset-progress">Reset XP and badges</button>
         <button class="primary" id="btn-settings-close">Done</button>
       </div>
     </div>
@@ -162,11 +190,19 @@
       <div class="panel small">
         <h2 id="over-title"></h2>
         <p id="over-reason"></p>
+        <div id="over-xp">
+          <div class="over-level"><span class="lvl" id="ov-level">1</span><div class="pf-main"><div class="pf-rank" id="ov-rank"></div><div class="xpbar"><div id="ov-bar"></div></div></div></div>
+          <ul id="ov-lines"></ul>
+          <div id="ov-total"></div>
+          <div id="ov-badges"></div>
+        </div>
         <button class="primary" id="btn-again">Play again</button>
         <button class="secondary" id="btn-over-menu">Main menu</button>
         <button class="secondary" id="btn-over-look">Look at the board</button>
       </div>
     </div>
+
+    <div id="toasts"></div>
 
     <script type="module" src="/src/main.js"></script>
   </body>

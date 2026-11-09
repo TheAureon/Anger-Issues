@@ -58,3 +58,25 @@ for (const mode of [R.CLASSIC, R.MERCIZERO]) {
   }
   console.log(`   ${mode}: ${plies} plies, result ${JSON.stringify(res)}, ${(Date.now() - t0) / plies | 0}ms/ply avg, max ${maxMs}ms`);
 }
+
+// Progression: XP, levels, badges
+{
+  const P = await import('../chess-shooter/src/progress.js');
+  const events = [];
+  const pr = new P.Progress((e) => events.push(e));
+  ok(P.levelOf(0) === 1 && P.levelOf(99) === 1 && P.levelOf(100) === 2 && P.levelOf(300) === 3, 'level thresholds 0/100/300');
+  pr.beginGame({ vsAI: true, human: 'w', difficulty: 'hard', mode: R.MERCIZERO });
+  const pawn = { type: 'p', color: 'b' }, queen = { type: 'q', color: 'b' };
+  pr.onShot({ mine: true, shooterType: 'r', intended: 10, victim: queen, victimSq: 10, distance: 4, chance: 0.4 });
+  const got = new Set(events.filter((e) => e.type === 'badge').map((e) => e.badge.id));
+  ok(['first-blood', 'max-range', 'long-shot', 'queenslayer'].every((b) => got.has(b)) && !got.has('stray'), 'kill badges: ' + [...got].join(','));
+  for (let i = 0; i < 4; i++) pr.onShot({ mine: true, shooterType: 'p', intended: 3, victim: null, victimSq: null, distance: 1, chance: 0.9 });
+  ok(pr.p.badges.stormtrooper, '4 misses in a row -> Stormtrooper');
+  pr.onShot({ mine: true, shooterType: 'n', intended: 3, victim: pawn, victimSq: 4, distance: 2, chance: 0.9 });
+  ok(pr.p.badges.stray, 'killing a different enemy -> Lucky Stray');
+  pr.onShot({ mine: true, shooterType: 'q', intended: 3, victim: { type: 'b', color: 'w' }, victimSq: 5, friendly: true, distance: 2, chance: 0.9 });
+  ok(pr.p.badges.oops && !pr.p.badges.untouchable, 'friendly fire -> Oops');
+  const sum = pr.endGame({ winner: 'w', reason: 'the king was shot' });
+  ok(pr.p.badges['beat-hard'] && pr.p.badges.regicide && !pr.p.badges.untouchable && !pr.p.badges.deadeye, 'win badges (no Untouchable after friendly fire)');
+  ok(sum.endXp - sum.startXp === pr.p.xp && pr.p.stats.wins === 1 && pr.p.stats.kills === 2, `game XP ${pr.p.xp}, level ${pr.level}, stats ${JSON.stringify(pr.p.stats)}`);
+}
