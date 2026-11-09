@@ -1,6 +1,10 @@
 import * as THREE from 'three';
 import { ROOMS } from './rooms.js';
 import { SKINS } from './mannequin.js';
+import { sendScoreToUsForge } from './usforge.js';
+
+// Leaderboard runs only count in the default room, so scores are comparable.
+const LEADERBOARD_ROOM = 'studio';
 
 /*
  * XP, ranks and badges. Purely for bragging rights: nothing is ever locked
@@ -80,6 +84,7 @@ export class Progress {
     this.toastQueue = [];
     this.toasting = false;
     this.lastMode = null;
+    this.startRun(); // the first mannequin was built before this existed
     window.addEventListener('beforeunload', () => this.save());
     document.addEventListener('visibilitychange', () => document.hidden && this.save());
   }
@@ -140,6 +145,8 @@ export class Progress {
       if (mult >= 5) this.unlock('combo_king');
     }
     const gained = Math.round(amount * mult);
+    // Run score for the leaderboard: action points only (not first-time or badge bonuses).
+    if (combo && this.run && !this.run.ended) this.run.score += gained;
     const before = this.levelInfo().level;
     this.data.xp += gained;
     this.dirty = true;
@@ -157,6 +164,26 @@ export class Progress {
       this.game.fx.burst(new THREE.Vector3(t.x, t.y + 0.8, t.z), { count: 40, colors: [0xffd27a, 0xff7a3d, 0xffffff, 0x7dff9b], speed: 4, size: 0.03, life: 1.6, glow: true });
     }
     this.toast({ icon: '⭐', title: `Level ${info.level}`, text: info.rank, kind: 'level' });
+  }
+
+  /* ------------------------------ leaderboard runs ------------------------------ */
+
+  /** A run is one mannequin: it starts when a fresh one is built. */
+  startRun() {
+    this.run = { score: 0, room: this.game.roomId, ended: false };
+  }
+
+  /**
+   * Ends the current run exactly once: at full teardown (every joint broken) or
+   * when the mannequin is replaced (new mannequin / room change), whichever first.
+   * Only runs in the default room with a score are reported.
+   */
+  endRun(reason) {
+    const run = this.run;
+    if (!run || run.ended) return;
+    run.ended = true;
+    run.reason = reason;
+    if (run.room === LEADERBOARD_ROOM && run.score > 0) sendScoreToUsForge(run.score);
   }
 
   /* ------------------------------ badges ------------------------------ */
@@ -305,7 +332,10 @@ export class Progress {
     if (!hips.has(by.thighL) && !hips.has(by.thighR)) this.unlock('legless');
     let intact = 0;
     for (const j of this.game.joints.list) if (j.kind === 'body') intact++;
-    if (intact === 0) this.unlock('teardown');
+    if (intact === 0) {
+      this.unlock('teardown');
+      this.endRun('teardown');
+    }
   }
 
   /** Per frame: polled badges, popups, autosave. */

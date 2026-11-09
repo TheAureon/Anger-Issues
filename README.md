@@ -33,6 +33,21 @@ npm run build
 This bundles with Vite and then runs `scripts/make-playable.mjs`, which inlines everything into the root
 `index.html` (also copied to `dist/`). Commit the regenerated `index.html` along with your source changes.
 
+## UsForge leaderboard
+
+When the game runs inside UsForge's page (an iframe), it reports one score per run to the parent
+page with `window.postMessage({ usforge: 'score', score, unit: 'points' }, '*')` via
+`sendScoreToUsForge` in `src/usforge.js`. UsForge asks for the nickname and shows the board; the game
+itself never does. Opened on its own, nothing is sent.
+
+- **Run:** one mannequin, from the moment a fresh one appears.
+- **Ends:** exactly once, at full teardown (every joint broken) or when the mannequin is replaced
+  (New mannequin, X, or a room change), whichever comes first.
+- **Score:** the destruction points earned on that mannequin. It's the action XP, combos included,
+  without one-off bonuses for trying a tool, room or look for the first time or for unlocking a badge.
+- **Board:** Studio (the default room) only, so scores are comparable. No score is sent from the title
+  screen or for an empty run, and points after a run ends don't count until the next mannequin.
+
 ## Controls
 
 | Action | Mouse / keyboard | Touch |
@@ -143,6 +158,7 @@ src/
   rooms.js         rooms and their hazards
   fx.js            instanced particles, flashes, camera shake, 2D overlay trails
   audio.js         WebAudio synth sound effects (no audio files)
+  usforge.js       UsForge leaderboard bridge (postMessage to the parent page)
   progress.js      XP, combos, ranks, badges, toasts, profile panel (saved in localStorage)
   music.js         procedural music: lookahead sequencer, synth instruments, chaos-reactive layers
   title.js         cinematic title screen: spotlight, slam-in logo, press any key, swoop into play

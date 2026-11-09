@@ -269,6 +269,7 @@ export class Mannequin {
     }
     this.byName = byName;
     this.game.life?.onBuild();
+    this.game.progress?.startRun();
   }
 
   clear() {
@@ -278,6 +279,7 @@ export class Mannequin {
   }
 
   reset() {
+    this.game.progress?.endRun('replaced');
     this.clear();
     this.build();
   }
