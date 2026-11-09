@@ -1,142 +1,117 @@
 import * as THREE from 'three';
-import { ROOMS } from './rooms.js';
-import { SKINS } from './mannequin.js';
-import { GORE_MODES } from './gore.js';
 
-const NAMES = ['Gerald', 'Woody', 'Splinter', 'Kevin', 'Sir Oakley', 'Plank', 'Pinecone', 'Barry', 'Timber', 'Clive', 'Norbert', 'Knot', 'Dougie', 'Mr. Hinges', 'Twiggy', 'Steve'];
-const TAGLINES = [
-  'A sandbox for bad days.',
-  'Wreck it. Rebuild it. Repeat.',
-  "It's afraid of you. Fair enough.",
-  'Cheaper than therapy.',
-];
-
-const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-
-/**
- * Title screen over the live scene: the camera circles the mannequin as it
- * wanders around, and room / skin / gore picks apply live behind the menu.
+/*
+ * Title screen: a cinematic splash over the live scene. The room goes dark,
+ * a spotlight picks out the mannequin from a low, slowly pushing-in camera,
+ * the logo letters slam down one by one, and "press any key" starts the game:
+ * the letters scatter, the lights come up and the camera swoops into play.
  */
+
+const LETTER_START = 0.9; // seconds before the first letter lands
+const LETTER_GAP = 0.09;
+
 export class TitleScreen {
   constructor(game, ui) {
     this.game = game;
     this.ui = ui;
     this.active = true;
-    this.angle = 0.6;
     this.t = 0;
-    this.camTarget = new THREE.Vector3(0, 1, 0);
+    this.look = new THREE.Vector3(0, 1.2, 0);
     game.title = this;
     game.controls.enabled = false;
     ui.root.classList.add('title-mode');
 
-    const logo = (word, cls) =>
-      `<span class="lw ${cls}">${[...word]
-        .map((ch, i) => `<span class="ch" style="--r:${((i * 37) % 11) - 5}deg;--d:${i * 0.06}s">${ch}</span>`)
+    // Letters with their landing delay, tilt, and scatter direction.
+    let i = 0;
+    const word = (w, cls) =>
+      `<span class="lw ${cls}">${[...w]
+        .map((ch) => {
+          const d = LETTER_START + i++ * LETTER_GAP;
+          const style = [
+            `--r:${(((i * 37) % 11) - 5) * 0.8}deg`,
+            `--d:${d.toFixed(2)}s`,
+            `--fx:${((Math.random() - 0.5) * 9).toFixed(2)}em`,
+            `--fy:${(-2 - Math.random() * 3).toFixed(2)}em`,
+            `--fr:${((Math.random() - 0.5) * 540).toFixed(0)}deg`,
+          ].join(';');
+          return `<span class="ch" style="${style}">${ch}</span>`;
+        })
         .join('')}</span>`;
+    const lettersHtml = word('ANGER', 'w1') + word('ISSUES', 'w2');
+    const landed = LETTER_START + i * LETTER_GAP + 0.3;
+    const touch = matchMedia('(pointer: coarse)').matches;
+
     const el = document.createElement('div');
     el.className = 'title';
+    el.setAttribute('role', 'button');
+    el.setAttribute('aria-label', 'Anger Issues. Press any key to start.');
+    el.style.setProperty('--vd', `${landed.toFixed(2)}s`);
+    el.style.setProperty('--pd', `${(landed + 0.5).toFixed(2)}s`);
     el.innerHTML = `
       <div class="title-vignette"></div>
-      <div class="title-inner">
-        <h1 class="logo" aria-label="Anger Issues">
-          ${logo('ANGER', 'w1')}
-          ${logo('ISSUES', 'w2')}
-          <span class="vein" aria-hidden="true">💢</span>
-        </h1>
-        <p class="tagline">${TAGLINES[(Math.random() * TAGLINES.length) | 0]}</p>
-        <div class="t-bottom">
-          <div class="title-card">
-            <label class="t-label" for="title-name">Your mannequin</label>
-            <div class="t-name">
-              <input id="title-name" maxlength="20" autocomplete="off" spellcheck="false" placeholder="Give it a name" />
-              <button type="button" class="t-dice" title="Random name" aria-label="Random name">🎲</button>
-            </div>
-            <details class="t-more">
-              <summary>Room, look &amp; gore</summary>
-              <div class="t-label">Room</div>
-              <div class="t-chips rooms"></div>
-              <div class="t-label">Look</div>
-              <div class="t-chips skins"></div>
-              <div class="t-label">Gore</div>
-              <div class="t-chips gore"></div>
-            </details>
-          </div>
-          <button class="play" type="button"><span>Let it out</span></button>
-          <button class="t-howto" type="button">How to play</button>
-        </div>
-      </div>
-      <div class="title-foot">No ads · No timers · Nothing to unlock</div>`;
+      <h1 class="title-logo">${lettersHtml}<span class="vein" aria-hidden="true">💢</span></h1>
+      <div class="title-prompt">${touch ? 'TAP TO START' : 'PRESS ANY KEY'}</div>
+      <div class="title-credit">NO ADS · NO TIMERS · NOTHING TO UNLOCK</div>
+      <div class="title-black"></div>`;
+    el.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      this.play();
+    });
     ui.root.append(el);
     this.el = el;
-    // Options start open on roomy screens, folded on phones so the mannequin stays visible.
-    el.querySelector('.t-more').open = game.container.clientWidth > 700 && game.container.clientHeight > 600;
 
-    this.nameInput = el.querySelector('#title-name');
-    this.nameInput.value = game.mannequin.name;
-    this.nameInput.oninput = () => {
-      game.mannequin.setName(this.nameInput.value);
-      ui.update();
-    };
-    this.nameInput.onkeydown = (e) => {
-      e.stopPropagation();
-      if (e.key === 'Enter') this.play();
-    };
-    el.querySelector('.t-dice').onclick = () => {
-      const n = NAMES[(Math.random() * NAMES.length) | 0];
-      this.nameInput.value = n;
-      game.mannequin.setName(n);
-      ui.update();
-    };
-    el.querySelector('.play').onclick = () => this.play();
-    el.querySelector('.t-howto').onclick = () => ui.toggleHelp(true);
-    this.renderChips();
+    // Screen thud as each letter lands.
+    this.timers = [];
+    for (let k = 0; k < i; k++) {
+      this.timers.push(
+        setTimeout(() => {
+          if (!this.active) return;
+          el.classList.remove('shake');
+          void el.offsetWidth;
+          el.classList.add('shake');
+        }, (LETTER_START + k * LETTER_GAP + 0.25) * 1000),
+      );
+    }
+
+    // Lighting: dark room, one warm spotlight on the mannequin.
+    this.saved = { hemi: game.hemi.intensity, sun: game.sun.intensity, exposure: game.renderer.toneMappingExposure };
+    game.hemi.intensity = 0.12;
+    game.sun.intensity = 0.12;
+    const spot = new THREE.SpotLight(0xffd2a0, 90, 14, 0.32, 0.55, 1.2);
+    spot.castShadow = true;
+    spot.shadow.mapSize.set(1024, 1024);
+    spot.shadow.bias = -0.0004;
+    game.scene.add(spot, spot.target);
+    this.spot = spot;
+    const rim = new THREE.PointLight(0xff5a2a, 6, 6, 1.5);
+    game.scene.add(rim);
+    this.rim = rim;
   }
 
-  renderChips() {
-    const game = this.game;
-    const chips = (sel, entries, current, onPick) => {
-      const box = this.el.querySelector(sel);
-      box.innerHTML = '';
-      for (const [id, d] of Object.entries(entries)) {
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.className = 't-chip' + (id === current ? ' on' : '');
-        b.innerHTML = `<span>${d.icon}</span>${esc(d.name || d.label)}`;
-        b.onclick = () => {
-          game.sfx.unlock();
-          game.sfx.click();
-          onPick(id);
-          this.renderChips();
-          this.ui.update();
-        };
-        box.append(b);
-      }
-    };
-    chips('.rooms', ROOMS, game.roomId, (id) => game.setRoom(id));
-    chips('.skins', SKINS, game.mannequin.skinId, (id) => game.mannequin.setSkin(id));
-    const gore = Object.fromEntries(Object.entries(GORE_MODES).map(([id, m]) => [id, { icon: m.icon, name: m.label.replace(/ gore$/, '').replace('Gore off', 'Off') }]));
-    chips('.gore', gore, game.gore.mode, (id) => game.gore.setMode(id));
+  chestPos() {
+    const c = this.game.mannequin.byName?.chest;
+    const t = c?.alive ? c.body.translation() : { x: 0, y: 1.3, z: 0 };
+    return new THREE.Vector3(t.x, t.y, t.z);
   }
 
-  /** Per frame while active: slow orbit around the wandering mannequin. */
+  /** Low, slowly pushing-in camera that sways a little around the mannequin. */
   camera(dt) {
-    if (!this.active) return;
     const game = this.game;
     this.t += dt;
-    this.angle += dt * 0.12;
-    const chest = game.mannequin.byName?.chest;
-    if (chest?.alive) {
-      const p = chest.body.translation();
-      this.camTarget.lerp(new THREE.Vector3(p.x, Math.max(0.6, p.y - 0.2), p.z), Math.min(1, dt * 2));
-    }
-    const r = 3.6 + Math.sin(this.t * 0.2) * 0.4;
+    const c = this.chestPos();
     const cam = game.camera;
-    // On wide screens the menu sits on the left, so frame the mannequin right of centre.
-    const wide = game.container.clientWidth > 900;
-    const side = new THREE.Vector3(Math.cos(this.angle), 0, -Math.sin(this.angle)).multiplyScalar(wide ? -0.9 : 0);
-    const look = this.camTarget.clone().add(side);
-    cam.position.set(look.x + Math.sin(this.angle) * r, 1.55 + Math.sin(this.t * 0.3) * 0.15, look.z + Math.cos(this.angle) * r);
-    cam.lookAt(look);
+    const portrait = game.container.clientWidth < game.container.clientHeight;
+    const push = Math.min(1, this.t / 14);
+    const dist = (portrait ? 5.2 : 4.4) - push * 0.7;
+    const ang = Math.sin(this.t * 0.16) * 0.3;
+    // Look a little above the head so the mannequin sits in the lower half, under the logo.
+    this.look.lerp(new THREE.Vector3(c.x, portrait ? 1.6 : 1.45, c.z), Math.min(1, dt * 3));
+    cam.position.set(this.look.x + Math.sin(ang) * dist, 0.55 + Math.sin(this.t * 0.4) * 0.04, this.look.z + Math.cos(ang) * dist);
+    cam.lookAt(this.look);
+    // Lights follow the mannequin.
+    this.spot.position.set(c.x + 0.7, 4.6, c.z + 1.4);
+    this.spot.target.position.set(c.x, 0.7, c.z);
+    this.rim.position.set(c.x - 1.2, 1.6, c.z - 1.4);
   }
 
   play() {
@@ -144,28 +119,39 @@ export class TitleScreen {
     const game = this.game;
     const ui = this.ui;
     this.active = false;
+    for (const t of this.timers) clearTimeout(t);
     game.sfx.unlock();
+    game.sfx.boom(0.4);
     game.sfx.whoosh();
-    game.mannequin.setName(this.nameInput.value);
     this.el.classList.add('leaving');
     ui.root.classList.remove('title-mode');
     ui.update();
-    // Swoop the camera to the play view, then hand control back.
+
+    // Swoop to the play view while the lights come back up.
     const cam = game.camera;
     const from = cam.position.clone();
-    const chest = game.mannequin.byName?.chest?.body.translation() || { x: 0, y: 1, z: 0 };
-    const target = new THREE.Vector3(chest.x, 0.88, chest.z);
+    const c = this.chestPos();
+    const target = new THREE.Vector3(c.x, 0.88, c.z);
     const to = target.clone().add(new THREE.Vector3(0.55, 0.57, 2.8));
-    const fromLook = this.camTarget.clone();
+    const fromLook = this.look.clone();
+    const s = this.saved;
+    const spot0 = this.spot.intensity;
+    const rim0 = this.rim.intensity;
     let k = 0;
     this.swoop = (dt) => {
-      k = Math.min(1, k + dt / 1.1);
-      const e = 1 - Math.pow(1 - k, 3);
+      k = Math.min(1, k + dt / 1.3);
+      const e = k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
       cam.position.lerpVectors(from, to, e);
-      const look = fromLook.clone().lerp(target, e);
-      cam.lookAt(look);
+      cam.lookAt(fromLook.clone().lerp(target, e));
+      game.hemi.intensity = THREE.MathUtils.lerp(0.12, s.hemi, e);
+      game.sun.intensity = THREE.MathUtils.lerp(0.12, s.sun, e);
+      this.spot.intensity = spot0 * (1 - e);
+      this.rim.intensity = rim0 * (1 - e);
       if (k >= 1) {
         this.swoop = null;
+        game.scene.remove(this.spot, this.spot.target, this.rim);
+        this.spot.dispose();
+        this.rim.dispose();
         game.controls.target.copy(target);
         game.controls.enabled = true;
         game.controls.update();

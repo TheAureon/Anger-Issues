@@ -401,7 +401,7 @@ export class Game {
   onKey(e) {
     if (e.target.tagName === 'INPUT') return;
     if (this.title?.active) {
-      if (e.key === 'Enter') this.title.play();
+      if (!['Shift', 'Control', 'Alt', 'Meta', 'Tab', 'CapsLock'].includes(e.key)) this.title.play();
       return;
     }
     const k = e.key.toLowerCase();

@@ -334,6 +334,13 @@ export class Life {
     const pos = bodyPos(b.C.body).setY(0);
     // Remember where danger came from for a few seconds after it stops moving.
     const th = this.threat || (this.memory && now < this.memory.until && this.fear > 0.35 ? { kind: 'memory', pos: this.memory.pos, urgency: this.fear } : null);
+    if (game.title?.active) {
+      // Centre stage on the title screen: stand still, look at the camera.
+      this.mode = 'idle';
+      this.target = pos.clone();
+      this.targetAt = now + 1;
+      return;
+    }
     if (this.freeze > 0) {
       this.mode = 'freeze';
       return;
@@ -541,6 +548,15 @@ export class Life {
     }
     if (game.grabbedEntity && b.main.has(game.grabbedEntity)) {
       this.lookTarget.copy(game.camera.position);
+      return;
+    }
+    if (game.title?.active) {
+      // Staring into the camera, with the odd nervous glance to the side.
+      if (now > this.glanceAt) {
+        this.glance = Math.random() < 0.7 ? 'player' : new THREE.Vector3((Math.random() - 0.5) * 6, 1.4, 1 + Math.random());
+        this.glanceAt = now + 1.2 + Math.random() * 2;
+      }
+      this.lookTarget.copy(this.glance === 'player' ? game.camera.position : this.glance);
       return;
     }
     if (now > this.glanceAt) {
