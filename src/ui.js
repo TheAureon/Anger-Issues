@@ -52,6 +52,11 @@ export class UI {
       this.flashWord(m.label, true);
       this.update();
     });
+    this.musicBtn = btn('🎵', 'Music on/off', () => {
+      game.music.setEnabled(!game.music.enabled);
+      this.flashWord(game.music.enabled ? 'Music on' : 'Music off', true);
+      this.update();
+    });
     this.soundBtn = btn('🔊', 'Sound on/off', () => {
       game.sfx.setEnabled(!game.sfx.enabled);
       this.update();
@@ -304,6 +309,7 @@ export class UI {
     this.skinBtn.innerHTML = `${skin.icon} ${skin.name} ▾`;
     this.slowBtn.classList.toggle('on', game.timeScale < 1);
     this.soundBtn.textContent = game.sfx.enabled ? '🔊' : '🔇';
+    if (game.music) this.musicBtn.classList.toggle('off', !game.music.enabled);
     this.goreBtn.textContent = GORE_MODES[game.gore.mode].icon;
     this.goreBtn.title = `${GORE_MODES[game.gore.mode].label} (click to change)`;
     this.stiffBtn.title = `Joints: ${STIFFNESS[game.joints.stiffnessId].label} (click to change)`;

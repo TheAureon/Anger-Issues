@@ -33,7 +33,8 @@ export class Sfx {
   }
 
   ok(name, gap = 0.04) {
-    if (!this.ctx || !this.enabled) return false;
+    // Nothing queues up while the browser still has audio blocked (it would all burst out on the first click).
+    if (!this.ctx || !this.enabled || this.ctx.state !== 'running') return false;
     const now = this.ctx.currentTime;
     if (this.last[name] && now - this.last[name] < gap) return false;
     this.last[name] = now;

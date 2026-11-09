@@ -516,6 +516,7 @@ export class Game {
     this.fx.update(vdt);
     this.life.update(vdt);
     this.gore.update(vdt);
+    this.music?.update(dt);
     this.updateHover();
     if (this.title && (this.title.active || this.title.swoop)) this.title.frame(dt);
     else this.controls.update();

@@ -384,6 +384,7 @@ export class Mannequin {
     j.damage += amount;
     this.game.life?.onHurt(e, amount, point);
     this.game.gore?.onHurt(e, amount, point);
+    this.game.music?.bump(amount * 0.15);
     if (j.damage >= j.strength) return this.sever(j);
     return false;
   }

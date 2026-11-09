@@ -63,6 +63,14 @@ stares into a low camera that slowly pushes in. The logo letters slam down one b
 thud, then PRESS ANY KEY (or TAP TO START). Starting scatters the letters, brings the lights up and
 swoops the camera into the game. Room, look, gore and the name are all set from the in-game top bar.
 
+**Music:** generated live in the browser, no audio files. The title has a dark, slow theme: pads in a
+big reverb, a heartbeat kick, a drone and sparse bells. In game there's an angsty minor-key groove
+that follows the chaos. It's just bass and hats when things are calm, drums come in once you start
+hitting things, and a lead riff and crashes arrive during heavy carnage or when the mannequin panics.
+It settles back down over time. Slow-mo muffles it, and the 🎵 button turns it off (remembered).
+Browsers block sound until your first click or key press, so on a first visit the title is silent
+and the music starts when you press start.
+
 **Name it:** the 🏷️ button in the top bar (or a click on the floating name tag above its head) opens
 a name box, with a 🎲 for random suggestions. The name stays over its head, even when that head is
 rolling around on its own, and it's remembered next time you play.
@@ -122,6 +130,7 @@ src/
   rooms.js         rooms and their hazards
   fx.js            instanced particles, flashes, camera shake, 2D overlay trails
   audio.js         WebAudio synth sound effects (no audio files)
+  music.js         procedural music: lookahead sequencer, synth instruments, chaos-reactive layers
   title.js         cinematic title screen: spotlight, slam-in logo, press any key, swoop into play
   ui.js, style.css toolbox, menus, help
   tools/           one file per category; each tool is { down, move, up, fixed, update }

@@ -3,12 +3,14 @@ import { initRapier } from './physics.js';
 import { Game } from './game.js';
 import { UI } from './ui.js';
 import { TitleScreen } from './title.js';
+import { Music } from './music.js';
 
 async function boot() {
   const app = document.getElementById('app');
   await initRapier();
   document.getElementById('loading')?.remove();
   const game = new Game(app);
+  new Music(game);
   const ui = new UI(game);
   new TitleScreen(game, ui);
   game.start();

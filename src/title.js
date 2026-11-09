@@ -20,6 +20,8 @@ export class TitleScreen {
     game.title = this;
     game.controls.enabled = false;
     ui.root.classList.add('title-mode');
+    // Plays right away if the browser allows audio before a click; otherwise it starts on the first press.
+    game.music?.play('title');
 
     // Letters with their landing delay, tilt, and scatter direction.
     let i = 0;
@@ -121,6 +123,7 @@ export class TitleScreen {
     this.active = false;
     for (const t of this.timers) clearTimeout(t);
     game.sfx.unlock();
+    game.music?.play('game');
     game.sfx.boom(0.4);
     game.sfx.whoosh();
     this.el.classList.add('leaving');

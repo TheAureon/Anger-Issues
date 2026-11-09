@@ -141,6 +141,11 @@ body {
   transform: scale(0.94);
 }
 
+.icon.off {
+  opacity: 0.4;
+  text-decoration: line-through;
+}
+
 .icon.on {
   background: var(--accent-soft);
   border-color: var(--accent) !important;
