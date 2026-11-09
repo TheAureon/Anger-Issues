@@ -2,6 +2,7 @@ import { CATEGORIES } from './tools/index.js';
 import { ROOMS } from './rooms.js';
 import { SKINS } from './mannequin.js';
 import { STIFFNESS } from './joints.js';
+import { GORE_MODES } from './gore.js';
 
 function el(tag, cls, html) {
   const e = document.createElement(tag);
@@ -45,6 +46,11 @@ export class UI {
     this.talkBtn = btn('💬', 'Mannequin chatter on/off', () => {
       game.life.talk = !game.life.talk;
       this.flashWord(game.life.talk ? 'Chatter on' : 'Chatter off', true);
+      this.update();
+    });
+    this.goreBtn = btn('🩸', 'Gore: off / cartoon / slime / rainbow', () => {
+      const m = game.gore.cycle();
+      this.flashWord(m.label, true);
       this.update();
     });
     this.soundBtn = btn('🔊', 'Sound on/off', () => {
@@ -215,6 +221,8 @@ export class UI {
     this.skinBtn.innerHTML = `${skin.icon} ${skin.name} ▾`;
     this.slowBtn.classList.toggle('on', game.timeScale < 1);
     this.soundBtn.textContent = game.sfx.enabled ? '🔊' : '🔇';
+    this.goreBtn.textContent = GORE_MODES[game.gore.mode].icon;
+    this.goreBtn.title = `${GORE_MODES[game.gore.mode].label} (click to change)`;
     this.talkBtn.classList.toggle('on', !game.life.talk);
     this.stiffBtn.title = `Joints: ${STIFFNESS[game.joints.stiffnessId].label} (click to change)`;
     this.stiffBtn.classList.toggle('on', game.joints.stiffnessId !== 'stiff');

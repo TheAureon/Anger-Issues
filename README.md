@@ -56,6 +56,11 @@ teases you when you go quiet. A cut-off head keeps talking ("Put me back!"), and
 toward the body. Put a piece back where it belongs and it moves like the original again. The 💬 button
 turns the chatter off.
 
+**Cartoon gore (optional):** the 🩸 button cycles Off → Cartoon (ketchup red) → Slime → Rainbow. It's
+deliberately silly: glossy stretched droplets, stumps that squirt in pulses, red stump caps with a
+cartoon bone, and blobby splats that stick to floors, walls and the mannequin. The press leaves a
+puddle and the chipper sprays. Your choice is remembered, and Off removes everything.
+
 **27 tools in 7 categories:**
 
 | Category | Tools |
@@ -85,6 +90,7 @@ src/
   physics.js       Rapier world wrapper: entities (body + colliders + mesh), raycasts
   joints.js        all joints: break-by-stretch, pose-holding muscles, fixed "stick" joints
   mannequin.js     body layout, skins, sever / damage / reattach logic
+  gore.js          optional cartoon gore: droplets, stump fountains, caps, splat decals
   life.js          personality: animated joint poses, face, moods, speech, threat sensing
   rooms.js         rooms and their hazards
   fx.js            instanced particles, flashes, camera shake, 2D overlay trails

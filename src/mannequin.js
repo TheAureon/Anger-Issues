@@ -347,14 +347,18 @@ export class Mannequin {
     const { joints, fx, sfx } = this.game;
     const w = joints.worldAnchor(j, 'a');
     joints.remove(j);
+    const pushed = [];
     if (j.kind === 'body') {
       for (const [e, s] of [[j.a, j.anchorA], [j.b, j.anchorB]]) {
         if (e.kind === 'part') {
-          e.sockets.push(s.clone());
-          if (e.sockets.length > 6) e.sockets.shift();
+          const socket = s.clone();
+          e.sockets.push(socket);
+          if (e.sockets.length > 6) this.game.gore?.onAttach(e, e.sockets.shift());
+          pushed.push({ e, socket });
         }
       }
     }
+    this.game.gore?.onSever(j, w, pushed);
     // Pop the pieces apart a little.
     const A = j.a.body;
     const B = j.b.body;
@@ -402,6 +406,7 @@ export class Mannequin {
     if (!j) return false;
     j.damage += amount;
     this.game.life?.onHurt(e, amount, point);
+    this.game.gore?.onHurt(e, amount, point);
     if (j.damage >= j.strength) return this.sever(j);
     return false;
   }
@@ -453,6 +458,7 @@ export class Mannequin {
     if (proper) j.rest.identity();
     j.base = j.rest.clone();
     const i = c.from.sockets.indexOf(c.socket);
+    this.game.gore?.onAttach(c.from, c.socket);
     if (i >= 0) c.from.sockets.splice(i, 1);
     fx.burst(c.point, { count: 10, colors: [0xffffff, 0xfff1a8], speed: 1.5, size: 0.025, life: 0.6, gravity: 0 });
     sfx.clank();

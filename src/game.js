@@ -4,6 +4,7 @@ import { Physics, RAPIER, bodyPos } from './physics.js';
 import { Joints } from './joints.js';
 import { Mannequin } from './mannequin.js';
 import { Life } from './life.js';
+import { Gore } from './gore.js';
 import { Fx } from './fx.js';
 import { Sfx } from './audio.js';
 import { createTools } from './tools/index.js';
@@ -79,6 +80,7 @@ export class Game {
 
     this.mannequin = new Mannequin(this);
     this.life = new Life(this);
+    this.gore = new Gore(this);
     this.tools = createTools(this);
     this.tool = this.tools[0];
     this.activeTool = null;
@@ -139,6 +141,7 @@ export class Game {
     this.props = [];
     for (const g of [...this.gadgets]) g.dispose();
     this.gadgets = [];
+    this.gore?.clearDecals();
   }
 
   /* ---------------------------------------------------------------- */
@@ -507,6 +510,7 @@ export class Game {
     for (const p of this.props) p.update?.(vdt);
     this.fx.update(vdt);
     this.life.update(vdt);
+    this.gore.update(vdt);
     this.updateHover();
     this.controls.update();
     this.fx.applyShake(this.camera);

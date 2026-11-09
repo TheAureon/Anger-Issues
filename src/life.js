@@ -33,6 +33,7 @@ const LINES = {
   weird: ["That's... not where that goes.", 'Is this a new look?', 'I can work with this.', 'Interesting choice.', 'Feels weird. I like it.'],
   headWeird: ['Why is everything behind me?', "Hey, this isn't my neck!", "I can't see where I'm going!"],
   bored: ["Is that all you've got?", "I'm still standing!", '...Hello?', 'Take a deep breath.', 'Feeling any better?', 'I could do this all day.', 'Hey! Over here!'],
+  gore: ["I'm leaking!", 'Is that ketchup?!', "That's supposed to stay inside!", 'Somebody get a mop!', "It's fine. It's fine.", 'Oh, that is NOT wood glue.'],
   boom: ['AAAH!', 'KABOOM?!', 'My ears!', 'Too loud!'],
   dizzy: ['Ugh... which way is up?', 'Seeing stars...', 'The room is spinning.'],
   hover: ['Uh oh.', "What's that for?", "Now, let's not be hasty...", 'I see you.', 'Easy with that thing.'],
@@ -217,6 +218,7 @@ export class Life {
     else if (j.kind !== 'body') return;
     else lines = LINES[partGroup(j.b.partName)];
     if (quiet && Math.random() < 0.5) return;
+    if (this.game.gore?.on && Math.random() < 0.35) lines = LINES.gore;
     this.say(pick(lines), { priority: 2 });
   }
 
