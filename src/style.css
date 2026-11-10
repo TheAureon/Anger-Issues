@@ -180,6 +180,12 @@ body {
   bottom: 0;
 }
 
+/* Once you've pressed start, clicks go straight to the game during the swoop. */
+.title.leaving {
+  pointer-events: none;
+  cursor: default;
+}
+
 .title.leaving::before {
   transform: translateY(-100%);
 }
@@ -1919,6 +1925,27 @@ kbd {
 @keyframes sheet-up {
   from {
     transform: translateY(40px);
+    opacity: 0;
+  }
+}
+
+.whiteout {
+  position: absolute;
+  inset: 0;
+  background: #fffaf0;
+  pointer-events: none;
+  z-index: 8;
+  animation: whiteout 1.5s ease-out forwards;
+}
+
+@keyframes whiteout {
+  0% {
+    opacity: 0;
+  }
+  6% {
+    opacity: 1;
+  }
+  100% {
     opacity: 0;
   }
 }

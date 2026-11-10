@@ -97,7 +97,7 @@ XP for:
 
 Quick chains of actions build a combo of up to ×5, and floating "+XP" numbers pop up where it happened.
 Levels come with ranks, from *Mildly Annoyed* through *Seething* and *Volcanic* up to *Inner Peace*.
-There are 31 badges (*Heads Will Roll*, *Wrong Way Round*, *Pancake*, *Bullseye*, *Combo King*,
+There are 37 badges (*Heads Will Roll*, *Wrong Way Round*, *Pancake*, *Bullseye*, *Combo King*,
 *Zen*, ...), each announced with a toast and a chime. The level chip in the top bar opens your
 profile: rank, XP, lifetime stats, and every badge with progress bars. Progress is saved locally and
 can be reset from the profile.
@@ -130,23 +130,26 @@ deliberately silly: glossy stretched droplets, stumps that squirt in pulses, red
 cartoon bone, and blobby splats that stick to floors, walls and the mannequin. The press leaves a
 puddle and the chipper sprays. Your choice is remembered, and Off removes everything.
 
-**27 tools in 7 categories:**
+**43 tools in 8 categories:**
 
 | Category | Tools |
 | --- | --- |
 | Hands | Grab, Slap |
-| Blunt | Hammer, Bat, Anvil drop, Spring Glove |
-| Blades | Katana (swipe), Axe, Saw (hold), Guillotine |
-| Ranged | Slingshot (pull back), Cannon, Bow (hold to draw; arrows stick), Ball Launcher |
-| Explosives | Firecrackers, Dynamite (sticks to things), Bowling Bomb |
+| Blunt | Hammer, Bat, Anvil drop, Spring Glove, Frying Pan (BONG, dizzies on the head), Sledgehammer (shockwave) |
+| Blades | Katana (swipe), Axe, Saw (hold), Guillotine, Chainsaw (hold), Shuriken (thrown, sticks) |
+| Ranged | Slingshot (pull back), Cannon, Bow (hold to draw; arrows stick), Ball Launcher, Shotgun (instant-hit spread), Nail Gun (pins pieces to walls), Harpoon (reels pieces in, can rip limbs off) |
+| Explosives | Firecrackers, Dynamite (sticks to things), Bowling Bomb, Grenade (thrown in an arc, fused), Mini Nuke (flash and mushroom cloud) |
 | Machines | Hydraulic Press, Wood Chipper, Spinning Blades, Conveyor, Trampoline |
-| Chaos | Gravity Gun, Magnet, Glue Gun, Tornado, Rocket |
+| Traps | Land Mine, Bear Trap (it may leave a foot behind), Banana Peel, Spike Trap |
+| Chaos | Gravity Gun, Magnet, Glue Gun, Tornado, Rocket, Lightning (arcs between parts, chars them), Freeze Ray (ice statue that shatters at triple damage), Balloons (floats things away) |
+
+The traps work because the mannequin walks around on its own: place one in its path and wait.
 
 **Rooms** (each with its own hazards): Studio, Construction Site (wrecking ball, conveyor), Kitchen
-(hot stove, giant blender, ceiling fan), Junkyard (car crusher, trampoline), Space (low gravity, black
-hole).
+(hot stove, giant blender, ceiling fan), Junkyard (car crusher, trampoline), Office (desks, rolling
+chairs, a giant paper shredder), Space (low gravity, black hole).
 
-**Skins:** Wooden, Crash dummy, Robot, Clay, Neon.
+**Skins:** Wooden, Crash dummy, Robot, Clay, Neon, Gold, Zombie.
 
 Everything is available from the start. No coins, no ads, no progression.
 
@@ -172,7 +175,8 @@ src/
   music.js         procedural music: lookahead sequencer, synth instruments, chaos-reactive layers
   title.js         cinematic title screen: spotlight, slam-in logo, press any key, swoop into play
   ui.js, style.css toolbox, menus, help
-  tools/           one file per category; each tool is { down, move, up, fixed, update }
+  tools/           one file per category (arsenal.js: newer weapons, traps.js: traps);
+                   each tool is { down, move, up, fixed, update }
 ```
 
 Adding a tool means adding an object to one of the `tools/*.js` arrays. `down(pointer, hit)` returns

@@ -137,6 +137,46 @@ export class Sfx {
     this.noise({ dur: 0.4, freq: 5000, type: 'highpass', gain: 0.18, attack: 0.02 });
   }
 
+  /** Frying-pan BONG. */
+  clang() {
+    if (!this.ok('clang', 0.08)) return;
+    for (const [f, g, d] of [[620, 0.3, 0.9], [930, 0.18, 0.7], [1490, 0.12, 0.5], [2330, 0.06, 0.35]]) {
+      this.tone({ freq: f, to: f * 0.985, dur: d, type: 'triangle', gain: g });
+    }
+    this.noise({ dur: 0.05, freq: 4000, type: 'bandpass', q: 2, gain: 0.3 });
+  }
+  thunder() {
+    if (!this.ok('thunder', 0.15)) return;
+    this.noise({ dur: 0.08, freq: 6000, type: 'highpass', gain: 0.7 });
+    this.noise({ dur: 1.6, freq: 900, to: 50, gain: 0.8, rate: 0.5, attack: 0.02 });
+    this.tone({ freq: 70, to: 30, dur: 1.2, gain: 0.5 });
+  }
+  zap() {
+    if (!this.ok('zap', 0.05)) return;
+    this.tone({ freq: 1400, to: 180, dur: 0.18, type: 'sawtooth', gain: 0.18 });
+    this.noise({ dur: 0.15, freq: 3000, type: 'bandpass', q: 3, gain: 0.3 });
+  }
+  shotgun() {
+    if (!this.ok('shotgun', 0.1)) return;
+    this.noise({ dur: 0.35, freq: 2500, to: 200, gain: 0.9 });
+    this.tone({ freq: 120, to: 40, dur: 0.25, gain: 0.6 });
+  }
+  squeak() {
+    if (!this.ok('squeak', 0.1)) return;
+    this.tone({ freq: 700, to: 1700, dur: 0.12, type: 'sine', gain: 0.3 });
+    this.tone({ freq: 1600, to: 600, dur: 0.18, type: 'sine', gain: 0.2 });
+  }
+  freeze() {
+    if (!this.ok('freeze', 0.2)) return;
+    this.noise({ dur: 0.5, freq: 7000, to: 2500, type: 'highpass', gain: 0.25, attack: 0.05 });
+    this.tone({ freq: 2400, to: 3200, dur: 0.4, type: 'sine', gain: 0.06 });
+  }
+  shatter() {
+    if (!this.ok('shatter', 0.06)) return;
+    this.noise({ dur: 0.3, freq: 5000, to: 1500, type: 'bandpass', q: 1, gain: 0.6 });
+    for (let i = 0; i < 3; i++) this.tone({ freq: 2000 + Math.random() * 2000, dur: 0.15, type: 'triangle', gain: 0.05 });
+  }
+
   /** Short fanfares: 'badge' (chime) or 'level' (rising arpeggio). */
   jingle(kind) {
     if (!this.ok('jingle_' + kind, 0.3)) return;
@@ -167,14 +207,14 @@ export class Sfx {
     g.gain.exponentialRampToValueAtTime(kind === 'wind' ? 0.35 : 0.22, t + 0.08);
     g.connect(this.master);
     const nodes = [];
-    if (kind === 'buzz' || kind === 'grind') {
+    if (kind === 'buzz' || kind === 'grind' || kind === 'chainsaw') {
       const o = c.createOscillator();
       o.type = 'sawtooth';
-      o.frequency.value = kind === 'buzz' ? 95 : 60;
+      o.frequency.value = { buzz: 95, grind: 60, chainsaw: 135 }[kind];
       const lfo = c.createOscillator();
-      lfo.frequency.value = kind === 'buzz' ? 22 : 9;
+      lfo.frequency.value = { buzz: 22, grind: 9, chainsaw: 38 }[kind];
       const lg = c.createGain();
-      lg.gain.value = 18;
+      lg.gain.value = kind === 'chainsaw' ? 34 : 18;
       lfo.connect(lg).connect(o.frequency);
       const f = c.createBiquadFilter();
       f.type = 'lowpass';

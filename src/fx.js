@@ -211,10 +211,12 @@ export class Fx {
   }
 
   explosion(p, radius) {
+    // Smoke and debris stop growing past dynamite size, so huge blasts don't bury the camera.
+    const r = Math.min(radius, 3);
     this.flash(p, radius * 0.55, 0.4);
-    this.smoke(p, { count: Math.round(10 + radius * 6), color: 0x555555, size: 0.12 * radius, speed: radius * 0.9, life: 1.8, up: radius });
-    this.burst(p, { count: Math.round(20 + radius * 10), colors: [0xffc34d, 0xff6a2b, 0xffffff], speed: radius * 5, size: 0.03, life: 0.7, glow: true });
-    this.burst(p, { count: Math.round(radius * 8), colors: [0x3a3a3a, 0x555555], speed: radius * 3.5, size: 0.04, life: 1.6 });
+    this.smoke(p, { count: Math.round(10 + r * 6), color: 0x5a5550, size: 0.12 * r, speed: r * 0.9, life: 1.8, up: r });
+    this.burst(p, { count: Math.round(20 + r * 10), colors: [0xffc34d, 0xff6a2b, 0xffffff], speed: r * 5, size: 0.03, life: 0.7, glow: true });
+    this.burst(p, { count: Math.round(r * 8), colors: [0x3a3a3a, 0x555555], speed: r * 3.5, size: 0.04, life: 1.6 });
     this.shake(Math.min(0.35, radius * 0.08));
   }
 
@@ -227,6 +229,23 @@ export class Fx {
     this.game.scene.add(obj);
     this.transients.push({ obj, dur, t: 0, fn });
     if (fn) fn(0, 0, obj);
+  }
+
+  /** Fading 3D line, e.g. a bullet tracer, a rope or a lightning bolt (pass several points). */
+  line(points, { color = 0xfff2b0, dur = 0.12, opacity = 1, additive = true } = {}) {
+    const mat = new THREE.LineBasicMaterial({
+      color,
+      transparent: true,
+      opacity,
+      blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
+      depthWrite: false,
+    });
+    const l = new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), mat);
+    this.transient(l, dur, (k) => {
+      mat.opacity = opacity * (1 - k);
+      if (k >= 1) mat.dispose();
+    });
+    return l;
   }
 
   /** 2D trail (screen space) e.g. katana slash. */
@@ -283,8 +302,17 @@ export class Fx {
   draw2d(dt) {
     const c = this.ctx2d;
     const dpr = this.dpr || 1;
-    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // Clear in device pixels with an identity transform, then draw in CSS pixels.
+    c.setTransform(1, 0, 0, 1, 0, 0);
     c.clearRect(0, 0, this.overlay.width, this.overlay.height);
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // Nothing to draw: hide the layer entirely so a stale frame can never linger on screen.
+    const idle = !this.trails.length && !this.drawers.size;
+    if (idle !== this.overlayIdle) {
+      this.overlayIdle = idle;
+      this.overlay.style.visibility = idle ? 'hidden' : '';
+    }
+    if (idle) return;
     c.lineCap = 'round';
     c.lineJoin = 'round';
     for (let i = this.trails.length - 1; i >= 0; i--) {

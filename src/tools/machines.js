@@ -119,7 +119,8 @@ export function makeChipper(game, at, right, { room = false, look = 'chipper' } 
   const sensorDesc = RAPIER.ColliderDesc.cuboid(W - t, 0.35, W - t).setTranslation(0, 0.4, 0).setSensor(true);
   const group = new THREE.Group();
   const isBlender = look === 'blender';
-  const wallMat = isBlender ? mat(0xbfe6ff, { opacity: 0.35, roughness: 0.1 }) : mat(0x2f8f3a, { roughness: 0.6 });
+  const isShredder = look === 'shredder';
+  const wallMat = isBlender ? mat(0xbfe6ff, { opacity: 0.35, roughness: 0.1 }) : isShredder ? mat(0x34373d, { roughness: 0.5, metalness: 0.3 }) : mat(0x2f8f3a, { roughness: 0.6 });
   for (const cd of cds.slice(1)) {
     const tr = cd.translation;
     const sh = cd.shape.halfExtents;
@@ -139,7 +140,7 @@ export function makeChipper(game, at, right, { room = false, look = 'chipper' } 
   rotor.position.y = 0.2;
   group.add(rotor);
   if (!isBlender) {
-    const chute = mesh(new THREE.BoxGeometry(0.5, 0.25, 0.3), mat(0x2f8f3a));
+    const chute = mesh(new THREE.BoxGeometry(0.5, 0.25, 0.3), isShredder ? mat(0x34373d) : mat(0x2f8f3a));
     chute.position.set(W + 0.25, 0.8, 0);
     chute.rotation.z = -0.4;
     group.add(chute);

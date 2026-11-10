@@ -90,7 +90,28 @@ export const SKINS = {
     sclera: mat(0x0d0d1a),
     chips: [0x00e5ff, 0xff4fd8, 0x1c1c2e],
   },
+  gold: {
+    name: 'Gold',
+    icon: '🏆',
+    // No environment map to reflect, so keep it only half metallic with a warm glow.
+    body: () => mat(0xffc93c, { roughness: 0.32, metalness: 0.45, emissive: 0x6a4300, emissiveIntensity: 0.35 }),
+    joint: mat(0xc9932a, { roughness: 0.35, metalness: 0.4, emissive: 0x3a2400, emissiveIntensity: 0.3 }),
+    face: mat(0x2a1a05),
+    sclera: mat(0xfff6d8, { roughness: 0.3 }),
+    chips: [0xffc93c, 0xffe9a0, 0xb8860b],
+  },
+  zombie: {
+    name: 'Zombie',
+    icon: '🧟',
+    body: (i) => mat([0x86a86b, 0x7a9d61, 0x91b077][i % 3], { roughness: 0.95 }),
+    joint: mat(0x5b4a3a, { roughness: 1 }),
+    face: mat(0x2b1b12),
+    sclera: mat(0xe8dc6a, { roughness: 0.6 }),
+    chips: [0x86a86b, 0x5b4a3a, 0x6b8f52],
+  },
 };
+
+const ICE = mat(0xbfe8ff, { roughness: 0.08, metalness: 0.15, emissive: 0x3a7fae, emissiveIntensity: 0.35 });
 
 /* ------------------------------------------------------------------ */
 /* Meshes                                                              */
@@ -291,13 +312,82 @@ export class Mannequin {
       e.mesh.traverse((o) => {
         if (!o.isMesh) return;
         const role = o.userData.role;
-        if (role === 'body') o.material = skin.body(e.skinIndex);
-        else if (role === 'joint') o.material = skin.joint;
-        else if (role === 'face') o.material = skin.face;
-        else if (role === 'sclera') o.material = skin.sclera;
+        let m = null;
+        if (role === 'body') m = skin.body(e.skinIndex);
+        else if (role === 'joint') m = skin.joint;
+        else if (role === 'face') m = skin.face;
+        else if (role === 'sclera') m = skin.sclera;
+        if (!m) return;
+        // While tinted (frozen / charred), change what it reverts to instead.
+        if (o.userData.baseMat) o.userData.baseMat = m;
+        else o.material = m;
       });
     }
     this.game.progress?.ev('skin', { id });
+  }
+
+  /** Temporarily re-skin a piece (charred, frozen). Restores after `dur` seconds if given. */
+  tint(e, material, dur = 0) {
+    if (!e?.alive || !e.mesh) return;
+    e.mesh.traverse((o) => {
+      const role = o.userData.role;
+      if (!o.isMesh || (role !== 'body' && role !== 'joint')) return;
+      if (!o.userData.baseMat) o.userData.baseMat = o.material;
+      o.material = material;
+    });
+    if (dur) {
+      const token = (e.tintToken = (e.tintToken || 0) + 1);
+      this.game.later(dur, () => {
+        if (e.tintToken === token && !e.frozen) this.untint(e);
+      });
+    }
+  }
+
+  untint(e) {
+    if (!e?.mesh) return;
+    e.mesh.traverse((o) => {
+      if (o.userData.baseMat) {
+        o.material = o.userData.baseMat;
+        delete o.userData.baseMat;
+      }
+    });
+  }
+
+  /** Freeze pieces solid: ice look, locked pose (a statue), triple damage, shatter on breaking. */
+  freeze(set, dur) {
+    const until = this.game.time + dur;
+    for (const e of set) {
+      if (e.kind !== 'part' || !e.alive) continue;
+      e.frozenUntil = until;
+      if (!e.frozen) {
+        e.frozen = true;
+        this.tint(e, ICE);
+        this.game.fx.burst(bodyPos(e.body), { count: 6, colors: [0xffffff, 0xbfe8ff], speed: 1.2, size: 0.025, life: 0.8, glow: true });
+      }
+    }
+    // Lock the current pose.
+    const qa = new THREE.Quaternion();
+    const qb = new THREE.Quaternion();
+    for (const j of this.game.joints.list) {
+      if (j.kind !== 'body' || !j.a.frozen || !j.b.frozen) continue;
+      const ra = j.a.body.rotation();
+      const rb = j.b.body.rotation();
+      qa.set(ra.x, ra.y, ra.z, ra.w);
+      qb.set(rb.x, rb.y, rb.z, rb.w);
+      j.rest.copy(qa.invert().multiply(qb));
+    }
+    this.game.later(dur + 0.05, () => this.thaw());
+  }
+
+  thaw() {
+    const now = this.game.time;
+    for (const e of this.parts) {
+      if (e.frozen && now >= e.frozenUntil - 0.02) {
+        e.frozen = false;
+        this.untint(e);
+        this.game.fx.burst(bodyPos(e.body), { count: 5, colors: [0xbfe8ff, 0x9fd8ff], speed: 1, size: 0.02, life: 0.6 });
+      }
+    }
   }
 
   /** All entities connected to `start` through joints. anchored = touches a fixed body. */
@@ -348,6 +438,11 @@ export class Mannequin {
       B.applyImpulse(dir.clone().multiplyScalar(B.mass()), true);
       A.applyImpulse(dir.multiplyScalar(-A.mass() * 0.5), true);
     }
+    if (j.a.frozen || j.b.frozen) {
+      fx.burst(w, { count: 26, colors: [0xffffff, 0xbfe8ff, 0x8fd0ff], speed: 4, size: 0.035, life: 1.4 });
+      sfx.shatter();
+      this.game.progress?.ev('shatter', { pos: w });
+    }
     if (!quiet) {
       fx.burst(w, { count: 14, colors: this.skin.chips, speed: 3, size: 0.035, life: 1.4 });
       sfx.crack();
@@ -384,6 +479,7 @@ export class Mannequin {
   /** Accumulate damage on the nearest joint; break it when it runs out of strength. */
   damage(e, amount, point) {
     if (!e || amount <= 0 || !e.joints.length) return false;
+    if (e.frozen) amount *= 3; // brittle
     const j = this.nearestJoint(e, point);
     if (!j) return false;
     j.damage += amount;

@@ -275,6 +275,67 @@ export const ROOMS = {
     },
   },
 
+  office: {
+    name: 'Office',
+    icon: '🏢',
+    sky: 0x2a2f38,
+    fog: [14, 30],
+    hemi: [0xf4f8ff, 0x5a6270],
+    sun: 2.0,
+    build(game) {
+      const r = roomKit(game);
+      r.floor(0x5b6475, 14, { tex: checkerTexture('#5f6879', '#576071', 14) });
+      r.walls(0xe9e4d8);
+      // Desks with monitors, in two rows.
+      for (const [x, z] of [[-3.8, -3], [-1.6, -3], [1.6, -3], [3.8, -3], [-3.8, 3.2], [3.8, 3.2]]) {
+        r.staticBox([x, 0.72, z], [0.8, 0.03, 0.4], 0xc9a77c);
+        for (const sx of [-0.72, 0.72]) r.staticBox([x + sx, 0.36, z], [0.03, 0.36, 0.36], 0x8a8f96, { opts: { metalness: 0.5 } });
+        const mon = mesh(new THREE.BoxGeometry(0.5, 0.32, 0.03), mat(0x1c1f24, { roughness: 0.3 }));
+        mon.position.set(x, 0.98, z - 0.2);
+        const screen = mesh(new THREE.PlaneGeometry(0.46, 0.28), mat(0x5ab4ff, { emissive: 0x2a6ab0, emissiveIntensity: 0.6 }), { cast: false });
+        screen.position.set(x, 0.98, z - 0.18);
+        const stand = mesh(new THREE.BoxGeometry(0.05, 0.2, 0.05), mat(0x1c1f24));
+        stand.position.set(x, 0.82, z - 0.2);
+        r.show(mon);
+        r.show(screen);
+        r.show(stand);
+      }
+      // Cubicle partitions.
+      r.staticBox([0, 0.7, -2.2], [5, 0.7, 0.04], 0x7b8496);
+      // Filing cabinet and a water cooler.
+      r.staticBox([6.2, 0.65, -1.5], [0.35, 0.65, 0.4], 0x9aa1ab, { opts: { metalness: 0.4 } });
+      const cooler = new THREE.Group();
+      const jug = mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.4, 10), mat(0x9fd8ff, { opacity: 0.6, roughness: 0.1 }));
+      jug.position.y = 0.38;
+      const base = mesh(new THREE.BoxGeometry(0.32, 0.6, 0.32), mat(0xf2f2f2));
+      base.position.y = -0.12;
+      cooler.add(jug, base);
+      r.dynamic(game.spawnProp({ shape: 'box', size: [0.16, 0.42, 0.16], mass: 18, pos: new THREE.Vector3(-6.1, 0.43, 1), meshObj: cooler, lifetime: 0 }));
+      // Rolling office chairs.
+      for (const [x, z] of [[-1.6, -2.2 + 0.9], [1.6, -1.3], [3.8, 2.3]]) {
+        const chair = new THREE.Group();
+        const seat = mesh(new THREE.BoxGeometry(0.46, 0.08, 0.46), mat(0x2b2f36));
+        const back = mesh(new THREE.BoxGeometry(0.46, 0.5, 0.06), mat(0x2b2f36));
+        back.position.set(0, 0.3, -0.2);
+        const post = mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.4, 6), mat(0x888888, { metalness: 0.8 }));
+        post.position.y = -0.24;
+        const star = mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.04, 5), mat(0x1c1f24));
+        star.position.y = -0.44;
+        chair.add(seat, back, post, star);
+        r.dynamic(game.spawnProp({ shape: 'box', size: [0.24, 0.24, 0.24], mass: 9, pos: new THREE.Vector3(x, 0.47, z), meshObj: chair, lifetime: 0, friction: 0.2 }));
+      }
+      // Ceiling lights.
+      for (const x of [-3, 0, 3]) {
+        const panel = mesh(new THREE.BoxGeometry(1.2, 0.04, 0.4), mat(0xffffff, { emissive: 0xffffff, emissiveIntensity: 0.8 }), { cast: false });
+        panel.position.set(x, 4.15, 0);
+        r.show(panel);
+      }
+      // The hazard: an industrial paper shredder in the corner.
+      r.hazard(makeChipper(game, new THREE.Vector3(5.4, 0, 5.2), new THREE.Vector3(-1, 0, 0), { look: 'shredder', room: true }));
+      return r;
+    },
+  },
+
   space: {
     name: 'Space',
     icon: '🌌',

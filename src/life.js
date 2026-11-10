@@ -199,8 +199,11 @@ export class Life {
     if (this.steps % 6 === 0) this.senseThreats(body);
     if (this.steps % 10 === 0) this.decide(body);
     this.updateLookTarget(body);
-    this.motor(dt, body);
-    this.drivePose(dt, body);
+    // Frozen solid: no balance, no walking, no posing. It's a statue now.
+    if (!body.C.frozen) {
+      this.motor(dt, body);
+      this.drivePose(dt, body);
+    }
     this.hopLoosePieces(dt);
   }
 

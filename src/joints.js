@@ -173,6 +173,11 @@ export class Joints {
       for (const j of this.list) {
         if (j.hold && !j.a.strained && !j.b.strained) this.hold(j);
       }
+    } else {
+      // Ragdoll mode still keeps frozen statues rigid.
+      for (const j of this.list) {
+        if (j.hold && j.a.frozen && j.b.frozen) this.hold(j);
+      }
     }
     for (const j of broken) if (j.alive) this.onBreak(j);
   }
@@ -203,8 +208,9 @@ export class Joints {
       ey = qt.y * k;
       ez = qt.z * k;
     }
-    const K = this.K * j.holdMul;
-    const blend = Math.min(0.6, this.blend * j.holdMul);
+    const frozen = j.a.frozen && j.b.frozen;
+    const K = frozen ? 80 : this.K * j.holdMul;
+    const blend = frozen ? 0.9 : Math.min(0.6, this.blend * j.holdMul);
     const wa = A.angvel();
     const wb = B.angvel();
     const dx = (ex * K - (wb.x - wa.x)) * blend;

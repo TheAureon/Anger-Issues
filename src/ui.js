@@ -315,6 +315,13 @@ export class UI {
     this.hold.classList.toggle('hidden', !on);
   }
 
+  /** Full-screen white flash (the mini nuke). */
+  whiteout() {
+    const w = el('div', 'whiteout');
+    this.root.append(w);
+    setTimeout(() => w.remove(), 1600);
+  }
+
   flashWord(text, info = false) {
     if (!info && Math.random() > 0.5) return;
     const w = this.word;

@@ -61,6 +61,12 @@ export const BADGES = {
   zero_g: ['🌌', 'Zero G', 'Break a joint in space.'],
   zen: ['🧘', 'Zen', 'Do nothing at all for a whole minute.'],
   thousand: ['💯', 'Busy Hands', 'Break 1,000 joints.', { goal: 1000, counter: 'severed' }],
+  watch_step: ['💣', 'Watch Your Step', 'Let it walk onto a land mine.'],
+  gotcha: ['🪤', 'Gotcha', 'Catch it in a bear trap.'],
+  slippery: ['🍌', 'Slippery', 'Make it slip on a banana peel.'],
+  brain_freeze: ['🧊', 'Brain Freeze', 'Shatter a frozen joint.'],
+  thunderstruck: ['⚡', 'Thunderstruck', 'Hit it with lightning.'],
+  up_away: ['🎈', 'Up, Up and Away', 'Float a piece more than 6 m up on balloons.'],
 };
 
 function rankFor(level) {
@@ -314,6 +320,30 @@ export class Progress {
       case 'arrow':
         this.addXp(d.part === 'head' ? 20 : 5, d.pos, d.part === 'head' ? 'Headshot!' : null);
         if (d.part === 'head') this.unlock('bullseye');
+        break;
+      case 'mine':
+        this.addXp(15, d.pos, 'Boom!');
+        this.unlock('watch_step');
+        break;
+      case 'beartrap':
+        this.addXp(15, d.pos, 'Gotcha!');
+        this.unlock('gotcha');
+        break;
+      case 'banana':
+        this.addXp(12, d.pos, 'Slipped!');
+        this.unlock('slippery');
+        break;
+      case 'shatter':
+        this.addXp(12, d.pos, 'Shattered!');
+        this.unlock('brain_freeze');
+        break;
+      case 'lightning':
+        this.addXp(10, d.pos, 'Zap!');
+        this.unlock('thunderstruck');
+        break;
+      case 'balloon_high':
+        this.addXp(20, d.pos, 'Bon voyage!');
+        this.unlock('up_away');
         break;
       case 'glue':
         if (d.toStatic && d.toPart) this.unlock('glued');
