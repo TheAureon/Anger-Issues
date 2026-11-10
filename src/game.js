@@ -592,8 +592,14 @@ export class Game {
     const loop = (now) => {
       const dt = (now - last) / 1000;
       last = now;
-      this.frame(dt);
+      // Schedule the next frame first, so a bug in one frame can never freeze the whole game.
       requestAnimationFrame(loop);
+      try {
+        this.frame(dt);
+      } catch (err) {
+        if (!this.loggedFrameError) console.error('Frame error (game keeps running):', err);
+        this.loggedFrameError = true;
+      }
     };
     requestAnimationFrame(loop);
   }

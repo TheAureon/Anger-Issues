@@ -168,11 +168,13 @@ export function makeChipper(game, at, right, { room = false, look = 'chipper' } 
       cool.set(o, game.time + 0.5);
       active = 0.6;
       if (o.kind === 'part') for (const j of [...o.joints]) game.mannequin.sever(j, { quiet: true });
-      if (o.kind === 'part') game.progress?.ev('shred', { pos: p });
-      if (o.kind === 'part') game.gore?.shred(isBlender ? center.clone().setY(H + 0.25) : center.clone().addScaledVector(right, W + 0.55).setY(0.95), exitDir);
       const p = isBlender
         ? center.clone().setY(H + 0.25)
         : center.clone().addScaledVector(right, W + 0.55).setY(0.95);
+      if (o.kind === 'part') {
+        game.progress?.ev('shred', { pos: p });
+        game.gore?.shred(p, exitDir);
+      }
       o.body.setTranslation({ x: p.x, y: p.y, z: p.z }, true);
       const v = exitDir.clone().multiplyScalar(isBlender ? 7 : 8).add(new THREE.Vector3((Math.random() - 0.5) * 2, isBlender ? 0 : 4, (Math.random() - 0.5) * 2));
       o.body.setLinvel({ x: v.x, y: v.y, z: v.z }, true);
