@@ -140,6 +140,7 @@ src/fx.js         tracers, muzzle flash, shattering pieces
 src/minimap.js    the 2D board in the corner
 src/progress.js   XP, levels, ranks, stats, badges, shop wallet (saved in localStorage)
 src/skins.js      shop catalogue: piece, board and gun skins
+src/icons.js      inline SVG icons and chess-piece silhouettes for the UI
 src/audio.js      synthesized sound effects
 src/music.js      procedural soundtrack (WebAudio sequencer)
 ```

@@ -13,32 +13,51 @@
 
     <div id="hud" class="hidden">
       <div id="topbar">
-        <div id="turn"><span id="turn-dot"></span><span id="turn-text">White to play</span></div>
-        <div id="mode-tag"></div>
-        <div id="top-buttons">
-          <button id="btn-view" title="Toggle overview camera (V)">🗺️</button>
-          <button id="btn-music" title="Music on (M)">🎵</button>
-          <button id="btn-sound" title="All sound on/off">🔊</button>
-          <button id="btn-help" title="How to play">?</button>
-          <button id="btn-menu" title="Pause (Esc)">⏸</button>
+        <div id="turn" class="glass">
+          <span id="turn-badge"></span>
+          <div class="turn-lines">
+            <span id="turn-text">White to play</span>
+            <span id="mode-tag"></span>
+          </div>
+        </div>
+        <div id="top-buttons" class="glass">
+          <button id="btn-view" data-icon="map" title="Overview camera (V)" aria-label="Overview camera"></button>
+          <button id="btn-music" data-icon="music" title="Music (M)" aria-label="Music"></button>
+          <button id="btn-sound" title="All sound" aria-label="Sound"></button>
+          <button id="btn-help" data-icon="help" title="How to play" aria-label="How to play"></button>
+          <span class="tb-sep"></span>
+          <button id="btn-menu" data-icon="pause" title="Pause (Esc)" aria-label="Pause"></button>
         </div>
       </div>
       <div id="status"></div>
-      <div id="graves"><div id="grave-w"></div><div id="grave-b"></div></div>
+      <div id="graves" class="glass hidden">
+        <div class="grave-row"><span class="grave-lbl">Black lost</span><div id="grave-b"></div></div>
+        <div class="grave-row"><span class="grave-lbl">White lost</span><div id="grave-w"></div></div>
+      </div>
 
-      <div id="corner">
-        <canvas id="minimap"></canvas>
+      <div id="corner" class="glass">
         <div id="card">
-          <div id="card-title"></div>
-          <div id="card-move"></div>
-          <div id="card-gun"></div>
-          <div id="card-count"></div>
+          <div id="card-head">
+            <span id="card-icon"></span>
+            <div class="card-name"><b id="card-title"></b><span id="card-sq"></span></div>
+            <div id="card-count"></div>
+          </div>
+          <div class="card-row" data-icon="boot"><span id="card-move"></span></div>
+          <div class="card-row gun" data-icon="gun"><span id="card-gun"></span></div>
         </div>
+        <canvas id="minimap"></canvas>
       </div>
 
       <div id="tip" class="hidden"></div>
       <div id="banner" class="hidden"></div>
-      <div id="hint">Drag to look · click a piece to see through it · click a square to move · click a red-marked enemy to shoot · scroll to zoom</div>
+      <div id="hint">
+        <span><kbd>Drag</kbd>look</span>
+        <span><kbd>Click</kbd>piece or square</span>
+        <span><kbd class="k-red">●</kbd>shoot</span>
+        <span><kbd>Scroll</kbd>zoom</span>
+        <span><kbd>V</kbd>overview</span>
+        <span><kbd>Q</kbd><kbd>E</kbd>cycle</span>
+      </div>
     </div>
 
     <!-- Title screen -->
@@ -64,14 +83,14 @@
             <div class="pf-sub"><span id="pf-xp">0 / 100 XP</span><span id="pf-badges">0 badges</span></div>
           </div>
         </button>
-        <button class="menu-btn hidden" id="btn-continue"><b>Continue</b><span>Back to your game</span></button>
-        <button class="menu-btn" id="btn-vs-ai"><b>Play vs Computer</b><span>Four difficulty levels</span></button>
-        <button class="menu-btn" id="btn-vs-local"><b>Pass &amp; Play</b><span>Play a friend on this device, no internet needed</span></button>
-        <button class="menu-btn" id="btn-shop"><b>Shop</b><span id="shop-menu-sub">Spend XP on skins</span></button>
-        <button class="menu-btn" id="btn-badges"><b>Badges &amp; Stats</b><span id="badge-count">Achievements and your record</span></button>
-        <button class="menu-btn" id="btn-howto"><b>How to Play</b><span>Rules and controls</span></button>
-        <button class="menu-btn" id="btn-settings"><b>Settings</b><span>Music, sound, camera</span></button>
-        <button class="menu-btn small" id="btn-to-title">Back to title</button>
+        <button class="menu-btn hidden" id="btn-continue" data-icon="play"><b>Continue</b><span>Back to your game</span></button>
+        <button class="menu-btn" id="btn-vs-ai" data-icon="target"><b>Play vs Computer</b><span>Four difficulty levels</span></button>
+        <button class="menu-btn" id="btn-vs-local" data-icon="users"><b>Pass &amp; Play</b><span>Play a friend on this device, no internet needed</span></button>
+        <button class="menu-btn" id="btn-shop" data-icon="bag"><b>Shop</b><span id="shop-menu-sub">Spend XP on skins</span></button>
+        <button class="menu-btn" id="btn-badges" data-icon="medal"><b>Badges &amp; Stats</b><span id="badge-count">Achievements and your record</span></button>
+        <button class="menu-btn" id="btn-howto" data-icon="book"><b>How to Play</b><span>Rules and controls</span></button>
+        <button class="menu-btn" id="btn-settings" data-icon="gear"><b>Settings</b><span>Music, sound, camera</span></button>
+        <button class="menu-btn small" id="btn-to-title" data-icon="back">Back to title</button>
       </div>
     </div>
 
@@ -106,11 +125,11 @@
             <label class="name-row"><span class="side-dot w"></span><span class="side-lbl">White</span><input id="name-w" maxlength="16" placeholder="Player 1" autocomplete="off" /></label>
             <label class="name-row"><span class="side-dot b"></span><span class="side-lbl">Black</span><input id="name-b" maxlength="16" placeholder="Player 2" autocomplete="off" /></label>
           </div>
-          <button class="secondary slim" id="btn-swap">⇅ Swap sides</button>
+          <button class="secondary slim" id="btn-swap" data-icon="swap">Swap sides</button>
           <label class="setting check"><span>Pass screen between turns<small>Covers the board until the next player taps Ready</small></span><input type="checkbox" id="opt-handoff" /></label>
         </div>
-        <button id="btn-start" class="primary">Start</button>
-        <button class="secondary" id="btn-setup-back">Back</button>
+        <button id="btn-start" class="primary" data-icon="play">Start</button>
+        <button class="secondary" id="btn-setup-back" data-icon="back">Back</button>
       </div>
     </div>
 
@@ -133,7 +152,7 @@
       <div class="panel">
         <div class="shop-head">
           <h2>Shop</h2>
-          <div class="wallet">💰 <b id="shop-balance">0</b> XP</div>
+          <div class="wallet" data-icon="coin"><b id="shop-balance">0</b> XP</div>
         </div>
         <p class="sub small-print">Click a skin to preview it on the board. Spending XP never lowers your level or rank.</p>
         <div class="tabs" id="shop-tabs"></div>
@@ -179,11 +198,11 @@
       <div class="panel small">
         <h2>Paused</h2>
         <p id="pause-info" class="sub"></p>
-        <button class="primary" id="btn-resume">Resume</button>
-        <button class="secondary" id="btn-restart">Restart</button>
-        <button class="secondary" id="btn-pause-howto">How to play</button>
-        <button class="secondary" id="btn-pause-settings">Settings</button>
-        <button class="secondary" id="btn-quit">Quit to main menu</button>
+        <button class="primary" id="btn-resume" data-icon="play">Resume</button>
+        <button class="secondary" id="btn-restart" data-icon="restart">Restart</button>
+        <button class="secondary" id="btn-pause-howto" data-icon="book">How to play</button>
+        <button class="secondary" id="btn-pause-settings" data-icon="gear">Settings</button>
+        <button class="secondary" id="btn-quit" data-icon="door">Quit to main menu</button>
       </div>
     </div>
 
@@ -234,9 +253,9 @@
           <div id="ov-total"></div>
           <div id="ov-badges"></div>
         </div>
-        <button class="primary" id="btn-again">Play again</button>
-        <button class="secondary" id="btn-over-menu">Main menu</button>
-        <button class="secondary" id="btn-over-look">Look at the board</button>
+        <button class="primary" id="btn-again" data-icon="restart">Play again</button>
+        <button class="secondary" id="btn-over-menu" data-icon="home">Main menu</button>
+        <button class="secondary" id="btn-over-look" data-icon="eye">Look at the board</button>
       </div>
     </div>
 

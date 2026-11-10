@@ -10,9 +10,11 @@ import { buildWorld, applyBoardSkin } from './world.js';
 import { Fx } from './fx.js';
 import * as sfx from './audio.js';
 import { Minimap } from './minimap.js';
+import { icon, pieceIcon, hydrateIcons } from './icons.js';
 import { Progress, BADGES, BADGE_XP, xpForLevel, levelOf, rankOf } from './progress.js';
 
 const $ = (id) => document.getElementById(id);
+hydrateIcons();
 
 // --- UsForge leaderboard -------------------------------------------------------------------
 // Reports a final score to the UsForge page this game is embedded in. Does nothing when the game
@@ -67,8 +69,10 @@ let viewKick = 0;
 
 const markerRoot = new THREE.Group();
 scene.add(markerRoot);
-const moveGeo = new THREE.CylinderGeometry(0.19, 0.19, 0.02, 12);
-const moveMat = new THREE.MeshBasicMaterial({ color: 0x3fdc8a, transparent: true, opacity: 0.8, depthWrite: false });
+const moveGeo = new THREE.CircleGeometry(0.1, 24).rotateX(-Math.PI / 2);
+const moveRingGeo = new THREE.RingGeometry(0.25, 0.3, 40).rotateX(-Math.PI / 2);
+const moveMat = new THREE.MeshBasicMaterial({ color: 0xc8ffe0, transparent: true, opacity: 0.85, depthWrite: false });
+const moveRingMat = new THREE.MeshBasicMaterial({ color: 0x5ee39a, transparent: true, opacity: 0.55, depthWrite: false });
 const ringGeo = new THREE.TorusGeometry(0.42, 0.035, 4, 20).rotateX(Math.PI / 2);
 const ringMat = new THREE.MeshBasicMaterial({ color: 0xff3322 });
 const diamondGeo = new THREE.OctahedronGeometry(0.085);
@@ -330,10 +334,20 @@ function explain(from, sq) {
   return '';
 }
 
+const GRAVE_ORDER = { q: 0, r: 1, b: 2, n: 3, p: 4, k: 5 };
+const GRAVE_VAL = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
 function renderGraves() {
+  const lost = { w: 0, b: 0 };
   for (const c of ['w', 'b']) {
-    $(`grave-${c}`).innerHTML = graves[c].map((t) => `<span class="g-${c}">${R.GLYPHS[t]}&#xFE0E;</span>`).join('');
+    const list = [...graves[c]].sort((x, y) => GRAVE_ORDER[x] - GRAVE_ORDER[y]);
+    for (const t of list) lost[c] += GRAVE_VAL[t];
+    $(`grave-${c}`).innerHTML = list.map((t) => pieceIcon(t, c)).join('');
   }
+  // Material lead shown on the side that lost less.
+  const lead = lost.b - lost.w;
+  if (lead > 0) $('grave-b').insertAdjacentHTML('beforeend', `<span class="lead">+${lead}</span>`);
+  if (lead < 0) $('grave-w').insertAdjacentHTML('beforeend', `<span class="lead">+${-lead}</span>`);
+  $('graves').classList.toggle('hidden', !graves.w.length && !graves.b.length);
 }
 
 // --- Refresh markers, tiles, HUD, minimap --------------------------------------------------
@@ -356,10 +370,12 @@ function refresh() {
     coverage: new Set(from >= 0 && !busy && settings.cover ? R.gunCoverage(st, from) : []),
   };
   for (const s of current.moves) {
-    const m = new THREE.Mesh(moveGeo, moveMat);
     const w = R.toWorld(s);
-    m.position.set(w.x, 0.012, w.z);
-    markerRoot.add(m);
+    const dot = new THREE.Mesh(moveGeo, moveMat);
+    const ring = new THREE.Mesh(moveRingGeo, moveRingMat);
+    dot.position.set(w.x, 0.012, w.z);
+    ring.position.set(w.x, 0.011, w.z);
+    markerRoot.add(dot, ring);
   }
   for (const s of current.targets) {
     const w = R.toWorld(s);
@@ -401,7 +417,8 @@ function refresh() {
     : vsAI
       ? `${COLOR_NAME[st.turn]} to play${st.turn !== human ? ' (computer)' : ''}`
       : `${playerName(st.turn)} (${COLOR_NAME[st.turn]}) to play`;
-  $('turn-dot').className = st.turn;
+  $('turn-badge').innerHTML = pieceIcon('k', st.turn);
+  $('turn').className = `glass turn-${st.turn}`;
   $('mode-tag').textContent =
     (st.mode === R.CLASSIC ? 'Classic · siege the king' : 'MerciZero · kings can die') +
     (vsAI ? ` · vs ${DIFFICULTIES[difficulty].label}` : ' · pass & play');
@@ -410,11 +427,15 @@ function refresh() {
   // Piece card.
   if (from >= 0) {
     const p = st.board[from];
-    $('card-title').innerHTML = `<span class="glyph g-${p.color}">${R.GLYPHS[p.type]}&#xFE0E;</span> ${R.NAMES[p.type]} <small>${R.sqName(from)}</small>`;
-    $('card-move').textContent = '🚶 ' + R.MOVE_TEXT[p.type];
-    $('card-gun').textContent = '🔫 ' + R.WEAPON_TEXT[p.type];
-    $('card-count').textContent = mine
-      ? `${current.moves.length} move${current.moves.length === 1 ? '' : 's'} · ${current.targets.length} target${current.targets.length === 1 ? '' : 's'}`
+    $('card-icon').innerHTML = pieceIcon(p.type, p.color);
+    $('card-title').textContent = R.NAMES[p.type];
+    $('card-sq').textContent = `on ${R.sqName(from)}`;
+    $('card-move').textContent = R.MOVE_TEXT[p.type];
+    $('card-gun').textContent = R.WEAPON_TEXT[p.type];
+    const nm = current.moves.length;
+    const nt = current.targets.length;
+    $('card-count').innerHTML = mine
+      ? `<span class="cnt mv" title="Squares it can move to">${nm}<small>move${nm === 1 ? '' : 's'}</small></span><span class="cnt tg ${nt ? 'on' : ''}" title="Enemies in range">${nt}<small>target${nt === 1 ? '' : 's'}</small></span>`
       : '';
   }
   $('minimap').classList.toggle('flip', false);
@@ -459,17 +480,17 @@ function updateHover() {
   let text = '';
   let cls = '';
   if (p && p.color === viewerColor() && p.id !== povId) {
-    text = `👁 See through ${R.NAMES[p.type].toLowerCase()}`;
+    text = `${icon('eye')}See through ${R.NAMES[p.type].toLowerCase()}`;
     canvas.style.cursor = 'pointer';
   } else if (current.moves.includes(s)) {
-    text = `Move to ${R.sqName(s)}`;
+    text = `${icon('boot')}Move to ${R.sqName(s)}`;
     cls = 'move';
     canvas.style.cursor = 'pointer';
   } else if (current.targets.includes(s)) {
     const aim = !hover.fromMap && viewMode === 'pov' && hover.point && hover.pointPiece ? hover.point : R.aimCenter(st, s);
     const key = `${from}-${s}-${aim.x.toFixed(2)}-${aim.y.toFixed(2)}-${aim.z.toFixed(2)}`;
     if (chanceCache.key !== key) chanceCache = { key, v: R.hitChance(st, from, s, aim, 220) };
-    text = `🎯 Shoot ${R.NAMES[p.type].toLowerCase()} · ${Math.round(chanceCache.v * 100)}% hit`;
+    text = `${icon('target')}Shoot ${R.NAMES[p.type].toLowerCase()} <b class="pct">${Math.round(chanceCache.v * 100)}%</b>`;
     cls = 'shoot';
     canvas.style.cursor = 'crosshair';
   } else if (p && from >= 0 && humanTurn() && !busy && p.color !== st.board[from].color) {
@@ -486,7 +507,7 @@ function updateHover() {
     tip.classList.add('hidden');
     return;
   }
-  tip.textContent = text;
+  tip.innerHTML = text; // built only from piece names, squares and icons
   tip.className = cls;
   const x = Math.min(window.innerWidth - 240, hover.x + 16);
   tip.style.left = `${x}px`;
@@ -1153,9 +1174,11 @@ function updateMood() {
   sfx.music.setMood(k >= 0 && R.attackedBy(st, k, R.other(viewerColor())) ? 2 : 1);
 }
 
+$('btn-sound').innerHTML = icon('volume');
 $('btn-sound').addEventListener('click', () => {
   sfx.setMuted(!sfx.muted);
-  $('btn-sound').textContent = sfx.muted ? '🔇' : '🔊';
+  $('btn-sound').innerHTML = icon(sfx.muted ? 'mute' : 'volume');
+  $('btn-sound').classList.toggle('off', sfx.muted);
 });
 $('btn-again').addEventListener('click', () => {
   if (!vsAI) swapNames(); // fair rematch: the other player gets White
@@ -1242,9 +1265,9 @@ function renderProfile() {
   $('pf-rank').textContent = L.rank;
   $('pf-bar').style.width = `${L.frac * 100}%`;
   $('pf-xp').textContent = `${L.into} / ${L.need} XP`;
-  $('pf-badges').textContent = `🏅 ${unlocked}/${BADGES.length}`;
+  $('pf-badges').innerHTML = `${icon('medal')}${unlocked}/${BADGES.length}`;
   $('badge-count').textContent = `${unlocked} of ${BADGES.length} unlocked`;
-  $('shop-menu-sub').textContent = `💰 ${progress.balance} XP to spend on skins`;
+  $('shop-menu-sub').textContent = `${progress.balance} XP to spend on skins`;
 }
 
 function renderBadges() {
@@ -1254,7 +1277,7 @@ function renderBadges() {
   $('bd-level').textContent = L.level;
   $('bd-rank').textContent = L.rank;
   $('bd-bar').style.width = `${L.frac * 100}%`;
-  $('bd-xp').textContent = `${p.xp} XP earned · 💰 ${progress.balance} to spend`;
+  $('bd-xp').textContent = `${p.xp} XP earned · ${progress.balance} to spend`;
   $('bd-next').textContent = `${L.need - L.into} XP to level ${L.level + 1}`;
   const acc = s.shots ? Math.round((s.hits / s.shots) * 100) : 0;
   const stats = [
@@ -1505,7 +1528,8 @@ function frame() {
     d.rotation.y = time * 2.5;
     d.position.y = d.userData.baseY + Math.sin(time * 4) * 0.04;
   }
-  moveMat.opacity = 0.6 + Math.sin(time * 5) * 0.2;
+  moveMat.opacity = 0.75 + Math.sin(time * 4) * 0.15;
+  moveRingMat.opacity = 0.4 + Math.sin(time * 4) * 0.15;
   ringMat.color.setHSL(0.01, 1, 0.5 + Math.sin(time * 6) * 0.1);
 
   fx.update(dt);
