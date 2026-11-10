@@ -2,6 +2,19 @@
 
 import { DEFAULT_EQUIPPED, CATEGORIES } from './skins.js';
 import { BATTLES, CHAPTERS, STAR_XP, starsFor } from './campaign.js';
+import { PUZZLE_XP, WEEKLY_XP, GAUNTLET, GAUNTLET_XP } from './challenges.js';
+
+export const PRESTIGE_LEVEL = 20;
+// Piece mastery: kills with each piece type unlock tiers I-V.
+export const MASTERY_TIERS = [3, 10, 25, 50, 100];
+export const MASTERY_REWARDS = { 3: 'Coloured tracer rounds for this piece', 5: 'Gold trim on this piece' };
+export function masteryTier(kills) {
+  let t = 0;
+  while (t < MASTERY_TIERS.length && kills >= MASTERY_TIERS[t]) t++;
+  return t;
+}
+// Rank perks: things that unlock at a level (by the highest level ever reached, so prestige keeps them).
+export const PERKS = { fog: 5, killcam: 6 };
 
 const KEY = 'gunmate-profile';
 
@@ -55,6 +68,12 @@ export const BADGES = [
   { id: 'chapter-3', icon: '🏅', name: 'High Command', desc: 'Win every battle in campaign chapter 3.' },
   { id: 'all-stars', icon: '🌟', name: 'Decorated', desc: 'Earn all 36 campaign stars.', progress: (s, p) => [Object.values(p.campaign.stars).reduce((a, b) => a + b, 0), 36] },
   { id: 'contractor', icon: '📋', name: 'Contractor', desc: 'Complete 10 daily contracts.', progress: (s) => [s.contracts, 10] },
+  { id: 'puzzler', icon: '🧩', name: 'Puzzler', desc: 'Solve a daily puzzle.' },
+  { id: 'streak-7', icon: '🔥', name: 'On Fire', desc: 'Solve the daily puzzle 7 days in a row.' },
+  { id: 'rule-breaker', icon: '🃏', name: 'Rule Breaker', desc: 'Win a weekly challenge.' },
+  { id: 'gauntlet', icon: '🛡️', name: 'Gauntlet Champion', desc: 'Beat all four computer levels in one gauntlet run.' },
+  { id: 'master', icon: '🎯', name: 'Weapon Master', desc: 'Reach mastery V with any piece (100 kills).' },
+  { id: 'prestige', icon: '💎', name: 'Prestige', desc: 'Reach level 20 and prestige.' },
   { id: 'shopper', icon: '🛍️', name: 'Fashionista', desc: 'Buy your first skin in the shop.' },
   { id: 'collector', icon: '🎨', name: 'Collector', desc: 'Own 10 skins.', progress: (s, p) => [Object.keys(p.owned).length, 10] },
   { id: 'veteran', icon: '🎖️', name: 'Veteran', desc: 'Finish 10 games.', progress: (s) => [s.games, 10] },
@@ -72,6 +91,15 @@ function blank() {
     campaign: { stars: {}, won: {} }, // battle id -> best stars (0-3); battle id -> true
     daily: null, // { date, ids, progress: {id: n}, done: {id: true} }
     firstWin: '', // date of the last first-win-of-the-day bonus
+    prestige: 0, // times prestiged
+    prestigeBase: 0, // lifetime XP at the last prestige; your level counts from here
+    peak: 1, // highest level ever reached (rank perks use it, so prestige never takes them away)
+    mastery: { p: 0, n: 0, b: 0, r: 0, q: 0, k: 0 }, // kills per piece type
+    puzzle: { last: '', streak: 0, best: 0, solved: 0 },
+    weekly: { claimed: '', wins: 0 },
+    gauntlet: { best: 0, clears: 0 },
+    titles: {}, // title id -> unlock time
+    title: '', // equipped title id
     badges: {}, // id -> unlock timestamp
     stats: { games: 0, wins: 0, losses: 0, draws: 0, kills: 0, deaths: 0, shots: 0, hits: 0, bestStreak: 0, streak: 0, contracts: 0 },
   };
@@ -90,6 +118,11 @@ export function load() {
       badges: p.badges || {},
       owned: p.owned || {},
       campaign: { stars: {}, won: {}, ...(p.campaign || {}) },
+      mastery: { ...b.mastery, ...(p.mastery || {}) },
+      puzzle: { ...b.puzzle, ...(p.puzzle || {}) },
+      weekly: { ...b.weekly, ...(p.weekly || {}) },
+      gauntlet: { ...b.gauntlet, ...(p.gauntlet || {}) },
+      titles: p.titles || {},
       equipped: { ...DEFAULT_EQUIPPED, ...(p.equipped || {}) },
     };
   } catch {
@@ -118,7 +151,88 @@ export class Progress {
   }
 
   get level() {
-    return levelOf(this.p.xp);
+    return levelOf(this.p.xp - this.p.prestigeBase);
+  }
+  // Highest level ever reached: rank perks and level-locked skins use this.
+  get rankLevel() {
+    return Math.max(this.p.peak || 1, this.level);
+  }
+  perk(name) {
+    return this.rankLevel >= PERKS[name];
+  }
+
+  // --- Prestige ---------------------------------------------------------------------------
+
+  get canPrestige() {
+    return this.level >= PRESTIGE_LEVEL;
+  }
+  prestigeNow() {
+    if (!this.canPrestige) return false;
+    this.p.prestige++;
+    this.p.prestigeBase = this.p.xp; // level restarts at 1; XP to spend is untouched
+    this.p.owned['pieces-prestige'] = true;
+    this.unlock('prestige');
+    this.checkTitles();
+    this.save();
+    return true;
+  }
+
+  // --- Titles -----------------------------------------------------------------------------
+
+  checkTitles() {
+    for (const t of TITLES) {
+      if (this.p.titles[t.id] || !t.when(this)) continue;
+      this.p.titles[t.id] = Date.now();
+      this.onEvent({ type: 'title', title: t });
+      if (t.xp) this.addXp(t.xp, `Title: ${t.name}`);
+    }
+  }
+  setTitle(id) {
+    if (id && !this.p.titles[id]) return;
+    this.p.title = id;
+    this.save();
+  }
+  get titleName() {
+    const t = TITLES.find((x) => x.id === this.p.title);
+    return t ? t.name : '';
+  }
+
+  // --- Daily puzzle, weekly challenge, gauntlet -------------------------------------------
+
+  solvePuzzle(day) {
+    const z = this.p.puzzle;
+    if (z.last === day) return { already: true, streak: z.streak };
+    const y = new Date(day + 'T12:00:00');
+    y.setDate(y.getDate() - 1);
+    z.streak = z.last === dayKey(y) ? z.streak + 1 : 1;
+    z.best = Math.max(z.best, z.streak);
+    z.last = day;
+    z.solved++;
+    this.addXp(PUZZLE_XP + 20 * Math.min(z.streak - 1, 6), z.streak > 1 ? `Daily puzzle (streak ${z.streak})` : 'Daily puzzle');
+    this.unlock('puzzler');
+    if (z.streak >= 7) this.unlock('streak-7');
+    return { already: false, streak: z.streak };
+  }
+  winWeekly(week) {
+    const w = this.p.weekly;
+    if (w.claimed === week) return { already: true };
+    w.claimed = week;
+    w.wins++;
+    this.addXp(WEEKLY_XP, 'Weekly challenge');
+    this.unlock('rule-breaker');
+    return { already: false };
+  }
+  gauntletRound(round, won) {
+    const gt = this.p.gauntlet;
+    if (!won) return { round, won };
+    gt.best = Math.max(gt.best, round + 1);
+    this.addXp(GAUNTLET_XP[round], `Gauntlet round ${round + 1}`);
+    const cleared = round === GAUNTLET.length - 1;
+    if (cleared) {
+      gt.clears++;
+      this.unlock('gauntlet');
+    }
+    return { round, won, cleared };
   }
 
   // --- Shop ------------------------------------------------------------------------------
@@ -127,13 +241,16 @@ export class Progress {
     return this.p.xp - this.p.spent;
   }
   owns(skin) {
-    if (skin.campaign) return !!this.p.owned[skin.id];
+    if (skin.rank) return this.rankLevel >= skin.rank; // arenas and other rank unlocks
+    if (skin.campaign || skin.prestige) return !!this.p.owned[skin.id];
     return skin.price === 0 || !!this.p.owned[skin.id];
   }
   canBuy(skin) {
     if (this.owns(skin)) return { ok: false, why: 'owned' };
     if (skin.campaign) return { ok: false, why: `Campaign reward: finish chapter ${skin.campaign}` };
-    if (skin.level && this.level < skin.level) return { ok: false, why: `Reach level ${skin.level}` };
+    if (skin.rank) return { ok: false, why: `Unlocks at level ${skin.rank}` };
+    if (skin.prestige) return { ok: false, why: 'Prestige reward' };
+    if (skin.level && this.rankLevel < skin.level) return { ok: false, why: `Reach level ${skin.level}` };
     if (this.balance < skin.price) return { ok: false, why: `Need ${skin.price - this.balance} more XP` };
     return { ok: true };
   }
@@ -157,6 +274,7 @@ export class Progress {
     if (amount <= 0) return;
     const before = this.level;
     this.p.xp += amount;
+    this.p.peak = Math.max(this.p.peak || 1, this.level);
     if (this.game) this.game.xp.push({ label, amount });
     this.onEvent({ type: 'xp', amount, label });
     const after = this.level;
@@ -258,7 +376,7 @@ export class Progress {
   // --- Game hooks ------------------------------------------------------------------------
 
   beginGame({ vsAI, human, difficulty, mode, campaign = null }) {
-    this.game = { vsAI, human, difficulty, mode, campaign, xp: [], badges: [], shots: 0, hits: 0, missStreak: 0, knightKills: 0, lost: 0, worstDiff: 0, myTurns: 0, startLevel: this.level, startXp: this.p.xp };
+    this.game = { vsAI, human, difficulty, mode, campaign, lostTypes: [], mastery: [], xp: [], badges: [], shots: 0, hits: 0, missStreak: 0, knightKills: 0, lost: 0, worstDiff: 0, myTurns: 0, startLevel: this.level, startXp: this.p.xp };
   }
 
   // `mine`: the shot was fired by a human player (always true in Pass & Play).
@@ -266,7 +384,10 @@ export class Progress {
     const g = this.game;
     if (!g) return;
     if (!mine) {
-      if (victim && g.vsAI && victim.color === g.human) g.lost++;
+      if (victim && !ricochet && g.vsAI && victim.color === g.human) {
+        g.lost++;
+        if (victim.type !== 'k') g.lostTypes.push(victim.type);
+      }
       return;
     }
     g.myTurns++;
@@ -283,7 +404,10 @@ export class Progress {
     }
     g.missStreak = 0;
     if (friendly) {
-      if (g.vsAI) g.lost++;
+      if (g.vsAI) {
+        g.lost++;
+        if (victim.type !== 'k') g.lostTypes.push(victim.type);
+      }
       this.unlock('oops');
       this.save();
       return;
@@ -291,6 +415,16 @@ export class Progress {
     g.hits++;
     this.p.stats.hits++;
     this.p.stats.kills++;
+    // Piece mastery.
+    const before = masteryTier(this.p.mastery[shooterType]);
+    this.p.mastery[shooterType]++;
+    const after = masteryTier(this.p.mastery[shooterType]);
+    if (after > before) {
+      g.mastery.push({ type: shooterType, tier: after });
+      this.onEvent({ type: 'mastery', piece: shooterType, tier: after, reward: MASTERY_REWARDS[after] });
+      this.addXp(30 * after, `Mastery ${'I II III IV V'.split(' ')[after - 1]}`);
+      if (after === 5) this.unlock('master');
+    }
     this.addXp(KILL_XP[victim.type], `Killed ${victim.type === 'k' ? 'the king' : 'a ' + { p: 'pawn', n: 'knight', b: 'bishop', r: 'rook', q: 'queen' }[victim.type]}`);
     if (distance >= 3) this.addXp(5, 'Long-range hit');
     this.unlock('first-blood');
@@ -358,10 +492,15 @@ export class Progress {
         s.streak = 0;
         this.addXp(20, 'Battle experience');
       }
-      const info = { won, difficulty: g.difficulty, mode: g.mode, myTurns: g.myTurns, lost: g.lost, campaign: !!g.campaign };
+      const kind = g.campaign ? g.campaign.kind || 'campaign' : null;
+      const info = { won, difficulty: g.difficulty, mode: g.mode, myTurns: g.myTurns, lost: g.lost, campaign: kind === 'campaign' };
       if (won) this.bumpContracts('win', info);
       this.bumpContracts('end', info);
-      if (g.campaign) g.campaignResult = this.recordBattle(g.campaign, info);
+      if (kind === 'campaign') g.campaignResult = this.recordBattle(g.campaign, info);
+      if (kind === 'puzzle' && won) g.challengeResult = { kind, ...this.solvePuzzle(g.campaign.day) };
+      if (kind === 'puzzle' && !won) g.challengeResult = { kind, failed: true };
+      if (kind === 'weekly') g.challengeResult = { kind, won, ...(won ? this.winWeekly(g.campaign.week) : {}) };
+      if (kind === 'gauntlet') g.challengeResult = { kind, ...this.gauntletRound(g.campaign.round, won) };
     } else {
       this.addXp(WIN_XP.local, 'Game played');
       this.unlock('hot-seat');
@@ -369,6 +508,7 @@ export class Progress {
       if (winner && reason === 'the king was shot') this.unlock('regicide');
     }
     this.checkCounters();
+    this.checkTitles();
     this.save();
     const summary = { ...g, endXp: this.p.xp, endLevel: this.level };
     this.game = null;
@@ -415,3 +555,20 @@ function seeded(str) {
     return ((h ^= h >>> 16) >>> 0) / 4294967296;
   };
 }
+
+// --- Titles (collection rewards) -------------------------------------------------------------
+const ownsAll = (pr, cat) =>
+  CATEGORIES.find((c) => c.key === cat).items.filter((x) => !x.campaign && !x.prestige && !x.rank).every((x) => pr.owns(x));
+export const TITLES = [
+  { id: 'quartermaster', name: 'Quartermaster', desc: 'Own every piece skin in the shop.', xp: 150, when: (pr) => ownsAll(pr, 'pieces') },
+  { id: 'armorer', name: 'Armorer', desc: 'Own every gun skin in the shop.', xp: 150, when: (pr) => ownsAll(pr, 'guns') },
+  { id: 'groundskeeper', name: 'Groundskeeper', desc: 'Own every board skin in the shop.', xp: 150, when: (pr) => ownsAll(pr, 'board') },
+  { id: 'campaigner', name: 'Campaigner', desc: 'Win every campaign battle.', xp: 200, when: (pr) => BATTLES.every((b) => pr.p.campaign.won[b.id]) },
+  { id: 'decorated', name: 'The Decorated', desc: 'Earn all 36 campaign stars.', xp: 200, when: (pr) => pr.campaignStars >= 36 },
+  { id: 'puzzle-master', name: 'Puzzle Master', desc: 'Reach a 7-day puzzle streak.', xp: 150, when: (pr) => pr.p.puzzle.best >= 7 },
+  { id: 'champion', name: 'Champion', desc: 'Clear the gauntlet.', xp: 150, when: (pr) => pr.p.gauntlet.clears > 0 },
+  { id: 'rebel', name: 'Rebel', desc: 'Win 3 weekly challenges.', xp: 150, when: (pr) => pr.p.weekly.wins >= 3 },
+  { id: 'weapon-master', name: 'Weapon Master', desc: 'Reach mastery V with any piece.', xp: 150, when: (pr) => Object.values(pr.p.mastery).some((k) => masteryTier(k) >= 5) },
+  { id: 'prestigious', name: 'The Prestigious', desc: 'Prestige at least once.', xp: 0, when: (pr) => pr.p.prestige > 0 },
+  { id: 'legend', name: 'Legend', desc: 'Unlock every badge.', xp: 500, when: (pr) => BADGES.every((b) => pr.p.badges[b.id]) },
+];

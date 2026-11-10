@@ -79,7 +79,7 @@ badge is worth another 50 XP.
 
 Levels need 100, 300, 600, 1000… XP in total, and every two levels give a new rank, from Private up
 to Grandmaster. Your level, XP bar and badge count are on the main menu; **Badges & Stats** shows all
-35 badges (locked ones say how to get them, counters show progress) plus your record: games, wins,
+41 badges (locked ones say how to get them, counters show progress) plus your record: games, wins,
 kills, accuracy and best win streak. The game-over screen lists what you earned that game.
 
 Progress is saved in the browser on this device. Settings has a reset button.
@@ -124,6 +124,37 @@ the first piece. Unseen squares are darkened and enemies there are hidden, in 3D
 board. The computer can only shoot at pieces it can see. In Pass & Play the fog follows whoever holds
 the device, and the turn recap won't reveal moves made in the fog.
 
+## Challenges
+
+Main menu → **Challenges**:
+
+- **Daily puzzle:** one short position a day (8 in rotation), e.g. "two knights guard the king, shoot it
+  within 6 turns". 120 XP, +20 for every day of your solving streak (up to +120). Retry as often as you
+  like; it pays once a day.
+- **Weekly challenge:** MerciZero against Soldier with a rule twist that changes every Monday: Long
+  Guns (sliders shoot their full movement), Steady Hands (half the wobble), Shell Shock (60% more
+  wobble), Pawn Shotguns (pawns also shoot 2 squares ahead), Royal Guard (kings shoot 2 squares) or
+  Close Quarters (sliders shoot only 2). First win of the week: 300 XP.
+- **Gauntlet:** beat Recruit, Soldier, Sniper and Warlord in a row. Pieces you lose stay lost for the
+  next round. 80 / 150 / 250 / 400 XP per round; your best run is saved.
+
+None of these post to the UsForge leaderboard.
+
+## Rank perks, mastery, prestige and titles
+
+- **Rank perks** unlock by level (the highest level you've reached, so prestige never takes them
+  away): Fog of War (5), kill-cam (6), arenas in the Shop's **Arena** tab (Autumn Vale 3, Dust Canyon 5,
+  Frostfield 7, Night Ops 10) and music tracks in Settings (Night Ops 4, Siege Engine 8).
+- **Kill-cam:** on long kills (3+ squares) and king kills, the camera rides behind the bullet in slow
+  motion. Can be turned off in Settings.
+- **Piece mastery:** kills with each piece type unlock tiers I–V (3, 10, 25, 50, 100 kills). Tier III
+  gives that piece coloured tracer rounds; tier V gives it gold trim.
+- **Prestige** at level 20: your level goes back to 1 for a 💎, the exclusive Prestige pieces and a
+  title. You keep your XP to spend, skins, badges, campaign progress and rank perks.
+- **Titles** for finishing collections (every shop piece / gun / board skin, the whole campaign, a
+  7-day puzzle streak, a gauntlet clear, 3 weekly wins, mastery V, prestige, every badge). Wear one on
+  your profile from Badges & Stats.
+
 ## Shop
 
 Spend XP on cosmetic skins from the main menu's **Shop**. Your level is based on all the XP you've
@@ -146,7 +177,8 @@ Keep, Siege Master, Regicide, Untouchable (win losing nothing), Deadeye (win wit
 Comeback Kid (win from 5+ material down), Blitz (win in 20 turns), one for beating each difficulty,
 Hot Seat, Fashionista, Collector, Fog Walker (win a Fog of War game), Graduate / Front-Line
 Veteran / High Command (finish each campaign chapter), Decorated (all 36 stars), Contractor (10
-contracts), Veteran (10 games), Centurion (100 kills), Trigger Happy (250 shots).
+contracts), Puzzler, On Fire (7-day puzzle streak), Rule Breaker (weekly win), Gauntlet Champion,
+Weapon Master (mastery V), Prestige, Veteran (10 games), Centurion (100 kills), Trigger Happy (250 shots).
 
 ## UsForge leaderboard
 
@@ -183,6 +215,7 @@ src/minimap.js    the 2D board in the corner
 src/progress.js   XP, levels, ranks, stats, badges, shop wallet (saved in localStorage)
 src/skins.js      shop catalogue: piece, board and gun skins
 src/campaign.js   campaign chapters, battles, star goals
+src/challenges.js daily puzzles, weekly rule twists, gauntlet rounds
 src/icons.js      inline SVG icons and chess-piece silhouettes for the UI
 src/audio.js      synthesized sound effects
 src/music.js      procedural soundtrack (WebAudio sequencer)

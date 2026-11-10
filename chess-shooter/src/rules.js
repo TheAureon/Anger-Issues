@@ -27,6 +27,10 @@ export const SPREAD = { p: 0.085, n: 0.07, b: 0.065, r: 0.058, q: 0.06, k: 0.075
 
 // Sliders shoot half their movement: 8 squares of travel, 4 of range.
 export const SLIDER_RANGE = 4;
+
+// Rule modifiers (weekly challenges). A state may carry `rules`; anything missing uses these.
+export const DEFAULT_RULES = { sliderRange: SLIDER_RANGE, spreadMul: 1, pawnForward: 0, kingRange: 1 };
+export const rulesOf = (st) => (st && st.rules) || DEFAULT_RULES;
 const MAX_REACH = { p: Math.SQRT2, k: Math.SQRT2, n: Math.sqrt(5), r: 4, b: 4 * Math.SQRT2, q: 4 * Math.SQRT2 };
 
 export const WEAPON_TEXT = {
@@ -175,10 +179,24 @@ export function gunReaches(st, from, to) {
   const adf = Math.abs(df);
   const adr = Math.abs(dr);
   switch (p.type) {
-    case 'p':
-      return adf === 1 && dr === (p.color === 'w' ? 1 : -1);
-    case 'k':
-      return Math.max(adf, adr) === 1;
+    case 'p': {
+      const dir = p.color === 'w' ? 1 : -1;
+      if (adf === 1 && dr === dir) return true;
+      // Pawn Shotguns: also straight ahead, up to `pawnForward` squares, line clear.
+      const fwd = rulesOf(st).pawnForward;
+      if (!fwd || df !== 0 || Math.sign(dr) !== dir || adr > fwd) return false;
+      for (let i = 1; i < adr; i++) if (st.board[sqAt(fileOf(from), rankOf(from) + dir * i)]) return false;
+      return true;
+    }
+    case 'k': {
+      const kr = rulesOf(st).kingRange;
+      if (Math.max(adf, adr) === 1) return true;
+      // Royal Guard: further along the 8 lines, line clear.
+      if (kr < 2 || !(df === 0 || dr === 0 || adf === adr) || Math.max(adf, adr) > kr) return false;
+      const n = Math.max(adf, adr);
+      for (let i = 1; i < n; i++) if (st.board[sqAt(fileOf(from) + Math.sign(df) * i, rankOf(from) + Math.sign(dr) * i)]) return false;
+      return true;
+    }
     case 'n':
       return (adf === 1 && adr === 2) || (adf === 2 && adr === 1);
     default: {
@@ -188,7 +206,7 @@ export function gunReaches(st, from, to) {
       if (p.type === 'b' && !diagonal) return false;
       if (p.type === 'q' && !straight && !diagonal) return false;
       const dist = Math.max(adf, adr);
-      if (dist > SLIDER_RANGE) return false;
+      if (dist > rulesOf(st).sliderRange) return false;
       const sf = Math.sign(df);
       const sr = Math.sign(dr);
       for (let i = 1; i < dist; i++) if (st.board[sqAt(fileOf(from) + sf * i, rankOf(from) + sr * i)]) return false;
@@ -336,8 +354,38 @@ export function muzzleOf(st, from, aim) {
   return { x: w.x + (dx / len) * off, y: d.h * MUZZLE, z: w.z + (dz / len) * off };
 }
 
-export function maxTravel(type) {
-  return MAX_REACH[type] + 0.45;
+export function maxTravel(type, st = null) {
+  const r = rulesOf(st);
+  const reach = {
+    ...MAX_REACH,
+    p: Math.max(Math.SQRT2, r.pawnForward),
+    k: r.kingRange * Math.SQRT2,
+    r: r.sliderRange,
+    b: r.sliderRange * Math.SQRT2,
+    q: r.sliderRange * Math.SQRT2,
+  };
+  return reach[type] + 0.45;
+}
+
+// Gun description for the HUD, reflecting any rule modifiers.
+export function weaponText(type, st = null) {
+  const r = rulesOf(st);
+  const n = r.sliderRange;
+  const half = n === SLIDER_RANGE ? ' (half its movement)' : '';
+  switch (type) {
+    case 'p':
+      return r.pawnForward ? `Shotgun: diagonals ahead, plus ${r.pawnForward} squares straight ahead.` : WEAPON_TEXT.p;
+    case 'k':
+      return r.kingRange > 1 ? `Revolver: ${r.kingRange} squares along every line.` : WEAPON_TEXT.k;
+    case 'b':
+      return `Rifle: diagonals, up to ${n} squares${half}.`;
+    case 'r':
+      return `Long rifle: straight lines, up to ${n} squares${half}.`;
+    case 'q':
+      return `Assault rifle: lines and diagonals, up to ${n} squares${half}.`;
+    default:
+      return WEAPON_TEXT[type];
+  }
 }
 
 // Ray vs. upright cylinder (centre cx,cz, radius r, height h). Returns entry distance or Infinity.
@@ -400,11 +448,11 @@ export function simulateShot(st, from, aim, rng = Math.random, spreadMul = 1) {
   const dx = aim.x - o.x;
   const dy = aim.y - o.y;
   const dz = aim.z - o.z;
-  const sigma = SPREAD[p.type] * spreadMul;
+  const sigma = SPREAD[p.type] * spreadMul * rulesOf(st).spreadMul;
   const yaw = Math.atan2(dx, dz) + gauss(rng) * sigma;
   const pitch = Math.atan2(dy, Math.hypot(dx, dz)) + gauss(rng) * sigma;
   const d = { x: Math.sin(yaw) * Math.cos(pitch), y: Math.sin(pitch), z: Math.cos(yaw) * Math.cos(pitch) };
-  let maxT = maxTravel(p.type);
+  let maxT = maxTravel(p.type, st);
   let ground = false;
   if (d.y < 0) {
     const tg = -o.y / d.y;

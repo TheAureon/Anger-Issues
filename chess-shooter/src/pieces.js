@@ -187,3 +187,9 @@ export const SHARD_GEOS = [
   new THREE.OctahedronGeometry(0.05),
   new THREE.BoxGeometry(0.07, 0.05, 0.06),
 ];
+
+// Piece mastery V: gold trim on this piece.
+export function goldTrim(group) {
+  const t = group.userData.trim;
+  if (t) applySpec(t, { c: 0xffcf4a, r: 0.22, m: 0.95, e: 0x6a4000, ei: 0.25 }, envMap);
+}

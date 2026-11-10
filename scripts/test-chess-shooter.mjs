@@ -151,3 +151,52 @@ for (const mode of [R.CLASSIC, R.MERCIZERO]) {
   ok(!new P.Progress(() => {}).owns(wt) && /Campaign reward/.test(new P.Progress(() => {}).canBuy(wt).why), 'campaign skins are not free or buyable');
   ok(pr.chapterUnlocked(C.CHAPTERS[1]) === pr.campaignStars >= 6, `chapter 2 gate follows stars (${pr.campaignStars} stars)`);
 }
+
+// Challenges, prestige, mastery, titles
+{
+  const P = await import('../chess-shooter/src/progress.js');
+  const CH = await import('../chess-shooter/src/challenges.js');
+  const S = await import('../chess-shooter/src/skins.js');
+  // Rule modifiers
+  let g = { ...R.newGame(R.MERCIZERO), board: new Array(64).fill(null) };
+  g.board[at('a1')] = { id: 1, type: 'r', color: 'w' }; g.board[at('a7')] = { id: 2, type: 'p', color: 'b' };
+  ok(!R.isTargetable(g, at('a1'), at('a7')) && R.isTargetable({ ...g, rules: { ...R.DEFAULT_RULES, sliderRange: 7 } }, at('a1'), at('a7')), 'Long Guns: rook reaches 6 squares only with the rule');
+  g.board[at('e2')] = { id: 3, type: 'p', color: 'w' }; g.board[at('e4')] = { id: 4, type: 'n', color: 'b' };
+  ok(!R.isTargetable(g, at('e2'), at('e4')) && R.isTargetable({ ...g, rules: { ...R.DEFAULT_RULES, pawnForward: 2 } }, at('e2'), at('e4')), 'Pawn Shotguns: pawn shoots 2 ahead only with the rule');
+  g.board[at('g1')] = { id: 5, type: 'k', color: 'w' }; g.board[at('g3')] = { id: 6, type: 'b', color: 'b' };
+  ok(!R.isTargetable(g, at('g1'), at('g3')) && R.isTargetable({ ...g, rules: { ...R.DEFAULT_RULES, kingRange: 2 } }, at('g1'), at('g3')), 'Royal Guard: king shoots 2 squares only with the rule');
+  const steady = R.hitChance({ ...g, rules: { ...R.DEFAULT_RULES, spreadMul: 0.5 } }, at('a1'), at('a7'));
+  ok(R.weaponText('r', { rules: { ...R.DEFAULT_RULES, sliderRange: 7 } }).includes('7 squares'), 'weapon text follows the rules');
+  // Gauntlet carries losses
+  const gp = CH.gauntletPlacement(['q', 'n', 'p', 'p']);
+  const gs = R.fromPlacement(gp, R.MERCIZERO);
+  const white = gs.board.filter((p) => p && p.color === 'w');
+  ok(white.length === 12 && !white.some((p) => p.type === 'q'), `gauntlet removes lost pieces (${gp})`);
+  ok(CH.weeklyFor(CH.weekKey(new Date(2026, 10, 9))) === CH.weeklyFor(CH.weekKey(new Date(2026, 10, 15))), 'weekly rule is stable Monday to Sunday');
+  ok(CH.puzzleFor('2026-11-10') === CH.puzzleFor('2026-11-10'), 'daily puzzle is stable within a day');
+
+  const pr = new P.Progress(() => {});
+  // Puzzle streak
+  ok(pr.solvePuzzle('2026-11-08').streak === 1 && pr.solvePuzzle('2026-11-09').streak === 2 && pr.solvePuzzle('2026-11-09').already, 'puzzle streak grows on consecutive days, pays once a day');
+  ok(pr.solvePuzzle('2026-11-11').streak === 1, 'puzzle streak resets after a missed day');
+  ok(!pr.winWeekly('2026-11-09').already && pr.winWeekly('2026-11-09').already, 'weekly reward pays once a week');
+  // Mastery
+  pr.beginGame({ vsAI: true, human: 'w', difficulty: 'easy', mode: R.CLASSIC });
+  for (let i = 0; i < 10; i++) pr.onShot({ mine: true, shooterType: 'n', intended: 1, victim: { type: 'p', color: 'b' }, victimSq: 1, distance: 2, chance: 0.9 });
+  ok(P.masteryTier(pr.p.mastery.n) === 2 && pr.game.mastery.length === 2, 'knight mastery reaches tier II after 10 kills');
+  pr.onShot({ mine: false, shooterType: 'q', intended: 2, victim: { type: 'r', color: 'w' }, victimSq: 2, distance: 3, chance: 0.5 });
+  ok(pr.game.lostTypes.join() === 'r', 'lost piece types are tracked for the gauntlet');
+  pr.endGame({ winner: 'w', reason: 'checkmate: the king is besieged' });
+  // Arenas unlock by rank
+  const snow = S.ARENAS.find((a) => a.id === 'arena-snow');
+  ok(!pr.owns(snow) && /level 7/.test(pr.canBuy(snow).why), 'arena locked below its level');
+  // Prestige
+  pr.p.xp += P.xpForLevel(20) + 10;
+  pr.p.peak = pr.level;
+  const spendBefore = pr.balance;
+  ok(pr.canPrestige && pr.prestigeNow() && pr.level === 1 && pr.balance === spendBefore + 50, `prestige resets level to 1, keeps the wallet (+50 badge XP)`);
+  ok(pr.owns(snow) && pr.perk('fog') && pr.perk('killcam'), 'rank perks and arenas survive prestige');
+  ok(pr.owns(S.PIECE_SKINS.find((s) => s.id === 'pieces-prestige')) && pr.p.titles.prestigious, 'prestige grants the Prestige pieces and title');
+  pr.setTitle('prestigious');
+  ok(pr.titleName === 'The Prestigious' && (pr.setTitle('legend'), pr.p.title === 'prestigious'), 'can only wear unlocked titles');
+}

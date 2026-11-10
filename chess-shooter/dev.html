@@ -78,13 +78,15 @@
         <button class="profile" id="profile-card" title="Badges and stats">
           <div class="lvl" id="pf-level">1</div>
           <div class="pf-main">
-            <div class="pf-rank" id="pf-rank">Private</div>
+            <div class="pf-rank"><span id="pf-rank">Private</span><span id="pf-prestige"></span></div>
+            <div class="pf-title" id="pf-title"></div>
             <div class="xpbar"><div id="pf-bar"></div></div>
             <div class="pf-sub"><span id="pf-xp">0 / 100 XP</span><span id="pf-badges">0 badges</span></div>
           </div>
         </button>
         <button class="menu-btn hidden" id="btn-continue" data-icon="play"><b>Continue</b><span>Back to your game</span></button>
         <button class="menu-btn" id="btn-campaign" data-icon="flag"><b>Campaign</b><span id="campaign-sub">12 battles · 0/36 stars</span></button>
+        <button class="menu-btn" id="btn-challenges" data-icon="bolt"><b>Challenges</b><span id="challenges-sub">Daily puzzle · Weekly · Gauntlet</span></button>
         <button class="menu-btn" id="btn-vs-ai" data-icon="target"><b>Play vs Computer</b><span>Four difficulty levels</span></button>
         <button class="menu-btn" id="btn-vs-local" data-icon="users"><b>Pass &amp; Play</b><span>Play a friend on this device, no internet needed</span></button>
         <button class="menu-btn" id="btn-shop" data-icon="bag"><b>Shop</b><span id="shop-menu-sub">Spend XP on skins</span></button>
@@ -157,6 +159,20 @@
       </div>
     </div>
 
+    <!-- Challenges -->
+    <div id="challenges" class="overlay hidden">
+      <div class="panel wide">
+        <h2>Challenges</h2>
+        <p class="sub small-print">A fresh puzzle every day, a rule-bending battle every week, and a gauntlet whenever you're ready.</p>
+        <div class="ch-grid">
+          <div class="ch-card" id="ch-puzzle"></div>
+          <div class="ch-card" id="ch-weekly"></div>
+          <div class="ch-card" id="ch-gauntlet"></div>
+        </div>
+        <button class="primary" id="btn-challenges-close" data-icon="back">Back</button>
+      </div>
+    </div>
+
     <!-- Campaign map -->
     <div id="campaign" class="overlay hidden">
       <div class="panel wide">
@@ -204,12 +220,18 @@
         <div class="badges-head">
           <div class="lvl big" id="bd-level">1</div>
           <div class="pf-main">
-            <h2 id="bd-rank">Private</h2>
+            <h2><span id="bd-rank">Private</span> <span id="bd-prestige-stars"></span></h2>
             <div class="xpbar"><div id="bd-bar"></div></div>
             <div class="pf-sub"><span id="bd-xp"></span><span id="bd-next"></span></div>
           </div>
         </div>
         <div class="stats" id="bd-stats"></div>
+        <div id="bd-prestige"></div>
+        <div class="row-label">Titles</div>
+        <p class="sub small-print">Unlock titles by completing collections. Click one to wear it on your profile.</p>
+        <div class="title-grid" id="bd-titles"></div>
+        <div class="row-label">Piece mastery</div>
+        <div class="mastery" id="bd-mastery"></div>
         <div class="row-label" id="bd-count"></div>
         <div class="badge-grid" id="bd-grid"></div>
         <button class="primary" id="btn-badges-close">Close</button>
@@ -225,6 +247,8 @@
         <label class="setting"><span>Look sensitivity</span><input type="range" id="sens" min="30" max="250" /></label>
         <label class="setting check"><span>Show field of fire</span><input type="checkbox" id="opt-cover" /></label>
         <label class="setting check"><span>Show control hints</span><input type="checkbox" id="opt-hints" /></label>
+        <label class="setting"><span>Music track<small id="track-note"></small></span><select id="opt-track"></select></label>
+        <label class="setting check"><span>Kill-cam<small id="killcam-note">Follow the bullet on long kills</small></span><input type="checkbox" id="opt-killcam" /></label>
         <button class="secondary danger" id="btn-reset-progress">Reset XP and badges</button>
         <button class="primary" id="btn-settings-close">Done</button>
       </div>
@@ -285,6 +309,7 @@
       <div class="panel small">
         <h2 id="over-title"></h2>
         <p id="over-reason"></p>
+        <div id="ov-challenge" class="ov-challenge hidden"></div>
         <div id="ov-campaign" class="hidden">
           <div class="ov-stars" id="ov-stars"></div>
           <ul class="star-goals" id="ov-goals"></ul>

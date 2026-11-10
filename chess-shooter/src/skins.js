@@ -43,6 +43,11 @@ export const PIECE_SKINS = [
     b: { body: { c: 0x15121b, r: 0.12, m: 0.6 }, trim: { c: 0x9a3cff, r: 0.3, m: 0.4, e: 0x5a14b0, ei: 0.6 } },
   },
   {
+    id: 'pieces-prestige', name: 'Prestige', price: 0, prestige: 1, desc: 'Ivory and onyx with a ruby glow. Prestige reward.',
+    w: { body: { c: 0xfbf7ee, r: 0.2, m: 0.1 }, trim: { c: 0xff2a4a, r: 0.2, m: 0.3, e: 0xff1030, ei: 0.8 } },
+    b: { body: { c: 0x0e0d12, r: 0.15, m: 0.5 }, trim: { c: 0xff2a4a, r: 0.2, m: 0.3, e: 0xff1030, ei: 0.8 } },
+  },
+  {
     id: 'pieces-veteran', name: 'Veteran', price: 0, campaign: 2, desc: 'Battle-worn olive and gunmetal. Campaign reward.',
     w: { body: { c: 0xb9b48c, r: 0.75, m: 0.1 }, trim: { c: 0xd4a640, r: 0.35, m: 0.8 } },
     b: { body: { c: 0x3c4434, r: 0.75, m: 0.1 }, trim: { c: 0xb0b8c0, r: 0.3, m: 0.85 } },
@@ -71,12 +76,27 @@ export const GUN_SKINS = [
   { id: 'guns-gold', name: 'Solid Gold', price: 1200, level: 7, desc: 'Gold-plated everything.', metal: { c: 0xe9b93e, r: 0.25, m: 0.95 }, grip: { c: 0x3b1f10, r: 0.5 } },
 ];
 
+// Arenas: the world around the board. Free, unlocked by rank (`rank` = level needed).
+export const ARENAS = [
+  { id: 'arena-forest', name: 'Pine Ridge', rank: 1, desc: 'Green hills and pine woods.',
+    sky: 0x9fc4d8, fogNear: 18, fogFar: 55, ground: 0x6f8a4c, plateau: 0x7d8a5a, leaves: [0x2f5d3a, 0x3a6b40, 0x2a4f36], trunk: 0x5b3d26, rock: 0x8a8780, sun: 0xfff1d6, sunI: 2.2, hemiI: 1.1, cloud: 0xffffff, treeScale: 1 },
+  { id: 'arena-autumn', name: 'Autumn Vale', rank: 3, desc: 'Orange and red leaves, golden light.',
+    sky: 0xe8c9a0, fogNear: 16, fogFar: 50, ground: 0x8a7a44, plateau: 0x9a8650, leaves: [0xc8641e, 0xd9902a, 0xa63a22], trunk: 0x4e3020, rock: 0x8e8378, sun: 0xffd9a0, sunI: 2.3, hemiI: 1.0, cloud: 0xfff1de, treeScale: 1 },
+  { id: 'arena-desert', name: 'Dust Canyon', rank: 5, desc: 'Sandstone mesas under a hot sun.',
+    sky: 0xf2d6a2, fogNear: 20, fogFar: 60, ground: 0xc99a5e, plateau: 0xb9824a, leaves: [0x6e8a3a, 0x7d9a44, 0x5e7a30], trunk: 0x8a6a40, rock: 0xb0703e, sun: 0xfff0c8, sunI: 2.6, hemiI: 1.2, cloud: 0xfffaf0, treeScale: 0.5 },
+  { id: 'arena-snow', name: 'Frostfield', rank: 7, desc: 'Snow-covered pines and pale sky.',
+    sky: 0xcfe0ee, fogNear: 14, fogFar: 46, ground: 0xe9f0f5, plateau: 0xd9e4ec, leaves: [0x2c4a3e, 0xdfe9ef, 0x34584a], trunk: 0x4a3a30, rock: 0x9aa4ae, sun: 0xeaf4ff, sunI: 2.0, hemiI: 1.3, cloud: 0xffffff, treeScale: 1 },
+  { id: 'arena-night', name: 'Night Ops', rank: 10, desc: 'Moonlight and long shadows.',
+    sky: 0x141a2c, fogNear: 12, fogFar: 40, ground: 0x2a3426, plateau: 0x343d2c, leaves: [0x15281e, 0x1b3324, 0x10201a], trunk: 0x2a1e16, rock: 0x4a4c56, sun: 0xa8c0ff, sunI: 1.3, hemiI: 0.45, cloud: 0x5a6280, treeScale: 1 },
+];
+
 export const CATEGORIES = [
   { key: 'pieces', label: 'Pieces', items: PIECE_SKINS },
   { key: 'board', label: 'Board', items: BOARD_SKINS },
   { key: 'guns', label: 'Guns', items: GUN_SKINS },
+  { key: 'arena', label: 'Arena', items: ARENAS },
 ];
-export const DEFAULT_EQUIPPED = { pieces: 'pieces-classic', board: 'board-classic', guns: 'guns-standard' };
+export const DEFAULT_EQUIPPED = { pieces: 'pieces-classic', board: 'board-classic', guns: 'guns-standard', arena: 'arena-forest' };
 export const findSkin = (cat, id) => {
   const list = CATEGORIES.find((c) => c.key === cat).items;
   return list.find((s) => s.id === id) || list[0];
@@ -100,5 +120,6 @@ export function swatches(cat, s) {
   const show = (spec) => ((spec.ei ?? 0) >= 0.5 ? spec.e : spec.c); // glowing parts show their glow
   if (cat === 'pieces') return [s.w.body, s.w.trim, s.b.body, s.b.trim].map(show);
   if (cat === 'board') return [s.light, s.dark, s.frame].map(show);
+  if (cat === 'arena') return [s.sky, s.ground, s.leaves[0], s.rock];
   return [s.metal, s.grip].map(show);
 }

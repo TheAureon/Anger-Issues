@@ -3,15 +3,20 @@ import * as THREE from 'three';
 import './style.css';
 import * as R from './rules.js';
 import { chooseAction, DIFFICULTIES } from './ai.js';
-import { buildPiece, buildViewGun, setEnvMap, setPieceSkin, setGunSkin } from './pieces.js';
+import { buildPiece, buildViewGun, setEnvMap, setPieceSkin, setGunSkin, goldTrim } from './pieces.js';
 import { CATEGORIES, findSkin, swatches } from './skins.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
-import { buildWorld, applyBoardSkin } from './world.js';
+import { buildWorld, applyBoardSkin, applyArena } from './world.js';
 import { Fx } from './fx.js';
 import * as sfx from './audio.js';
 import { Minimap } from './minimap.js';
 import { icon, pieceIcon, hydrateIcons } from './icons.js';
-import { Progress, BADGES, BADGE_XP, CONTRACTS, xpForLevel, levelOf, rankOf } from './progress.js';
+import {
+  Progress, BADGES, BADGE_XP, CONTRACTS, TITLES, PERKS, PRESTIGE_LEVEL, MASTERY_TIERS, MASTERY_REWARDS,
+  masteryTier, dayKey, xpForLevel, levelOf, rankOf,
+} from './progress.js';
+import { puzzleBattle, weeklyBattle, gauntletBattle, puzzleFor, weeklyFor, weekKey, GAUNTLET, GAUNTLET_XP, PUZZLE_XP, WEEKLY_XP } from './challenges.js';
+import { TRACKS } from './music.js';
 import { BATTLES, CHAPTERS, starGoals } from './campaign.js';
 
 const $ = (id) => document.getElementById(id);
@@ -119,7 +124,6 @@ let fogHidden = new Set();
 let fogVisible = null; // Set of visible squares, or null when there's no fog
 const MODE_LABEL = { classic: 'Classic', mercizero: 'MerciZero', fog: 'Fog of War' };
 const MODE_LINE = { classic: 'Classic · siege the king', mercizero: 'MerciZero · kings can die', fog: 'Fog of War · shoot the king' };
-const FOG_LEVEL = 5;
 let gameToken = 0; // bumps on every new game so stale async turns stop
 const settings = {
   musicVol: +loadPref('gunmate-vol-music', '70'),
@@ -127,6 +131,8 @@ const settings = {
   sens: +loadPref('gunmate-sens', '100'),
   cover: loadPref('gunmate-cover', '1') === '1',
   hints: loadPref('gunmate-hints', '1') === '1',
+  killcam: loadPref('gunmate-killcam', '1') === '1',
+  track: loadPref('gunmate-track', 'march'),
 };
 
 function loadPref(key, fallback) {
@@ -192,8 +198,13 @@ function makeGroup(p) {
   g.userData.h = dims.h;
   g.userData.id = p.id;
   g.rotation.y = FORWARD_YAW[p.color];
+  const yours = !started ? p.color === 'w' : vsAI ? p.color === human : true;
+  if (yours && masteryTier(progress.p.mastery[p.type]) >= 5) goldTrim(g);
   return g;
 }
+
+// Mastery III: coloured tracer rounds per piece type.
+const TRACER_COLORS = { p: 0x6dff8a, n: 0xc07bff, b: 0x5ce8ff, r: 0xff5a4a, q: 0xff6ad5, k: 0xffd34d };
 function placeAll() {
   for (const g of groups.values()) scene.remove(g);
   groups.clear();
@@ -211,6 +222,7 @@ function placeAll() {
 // --- Camera --------------------------------------------------------------------------------
 
 let trans = null;
+let killcam = null; // { head, dir } while the kill-cam follows a bullet
 const _pos = new THREE.Vector3();
 const _quat = new THREE.Quaternion();
 const _euler = new THREE.Euler(0, 0, 0, 'YXZ');
@@ -336,7 +348,8 @@ function explain(from, sq) {
       const df = Math.abs(R.fileOf(sq) - R.fileOf(from));
       const dr = Math.abs(R.rankOf(sq) - R.rankOf(from));
       const aligned = (t !== 'b' && (df === 0 || dr === 0)) || (t !== 'r' && df === dr);
-      if (aligned && Math.max(df, dr) > R.SLIDER_RANGE) return `Out of range: ${R.NAMES[t].toLowerCase()}s shoot only ${R.SLIDER_RANGE} squares (half their movement).`;
+      const range = R.rulesOf(st).sliderRange;
+      if (aligned && Math.max(df, dr) > range) return `Out of range: ${R.NAMES[t].toLowerCase()}s shoot only ${range} squares.`;
       if (aligned) return 'Line of fire is blocked.';
     }
     return `Out of range. ${R.WEAPON_TEXT[t]}`;
@@ -453,7 +466,7 @@ function refresh() {
   $('turn').className = `glass turn-${st.turn}`;
   let tag = MODE_LINE[st.mode] + (vsAI ? ` · vs ${aiName}` : ' · pass & play');
   if (battle) {
-    tag = `Campaign · ${battle.name} · ${MODE_LABEL[st.mode]}`;
+    tag = battle.kind ? `${battle.name} · ${MODE_LABEL[st.mode]}` : `Campaign · ${battle.name} · ${MODE_LABEL[st.mode]}`;
     if (battle.turnLimit) tag += ` · ${Math.max(0, battle.turnLimit - myTurnsSoFar())} turns left`;
   }
   $('mode-tag').textContent = tag;
@@ -466,7 +479,7 @@ function refresh() {
     $('card-title').textContent = R.NAMES[p.type];
     $('card-sq').textContent = `on ${R.sqName(from)}`;
     $('card-move').textContent = R.MOVE_TEXT[p.type];
-    $('card-gun').textContent = R.WEAPON_TEXT[p.type];
+    $('card-gun').textContent = R.weaponText(p.type, st);
     const nm = current.moves.length;
     const nt = current.targets.length;
     $('card-count').innerHTML = mine
@@ -683,7 +696,19 @@ async function doShoot(a, aim, spreadMul, mine = false) {
   }
   fx.muzzleFlash(start);
   sfx.gunshot(shooter.type);
-  await fx.tracer(start, end);
+  const target0 = res.hit != null ? st.board[res.hit] : null;
+  const dist0 = Math.max(Math.abs(R.fileOf(a.to) - R.fileOf(a.from)), Math.abs(R.rankOf(a.to) - R.rankOf(a.from)));
+  const lethal = target0 && target0.color !== shooter.color && !(target0.type === 'k' && st.mode === R.CLASSIC);
+  const useCam = settings.killcam && progress.perk('killcam') && lethal && ((mine && dist0 >= 3) || target0.type === 'k') && !fogHidden.has(a.from);
+  const tracerColor = mine && masteryTier(progress.p.mastery[shooter.type]) >= 3 ? TRACER_COLORS[shooter.type] : null;
+  if (useCam) {
+    // Kill-cam: follow the bullet in slow motion.
+    killcam = { head: start.clone(), dir: end.clone().sub(start).normalize() };
+    await fx.tracer(start, end, 6, tracerColor, (h, d) => {
+      killcam.head.copy(h);
+      killcam.dir.copy(d);
+    });
+  } else await fx.tracer(start, end, 38, tracerColor);
   if (tok !== gameToken) return;
 
   let kill = null;
@@ -733,6 +758,11 @@ async function doShoot(a, aim, spreadMul, mine = false) {
     }
     sfx.thud();
     status(res.ground ? 'Missed! The bullet hit the floor.' : 'Missed! The bullet flew past.', 'warn');
+  }
+  if (killcam) {
+    await wait(650);
+    killcam = null;
+    startTransition(0.45);
   }
   turnTo(g, FORWARD_YAW[shooter.color], 0.4);
   const f = R.toWorld(a.from);
@@ -867,13 +897,20 @@ function gameOver(result) {
   let title = won ? `${COLOR_NAME[won]} wins` : 'Draw';
   if (!vsAI && won) title = `${playerName(won)} wins!`;
   if (vsAI && won) title = won === human ? 'You win!' : `${aiName} wins`;
-  if (battle) title = won === human ? 'Mission complete!' : 'Mission failed';
+  if (battle) {
+    const k = battle.kind;
+    if (k === 'puzzle') title = won === human ? 'Puzzle solved!' : 'Puzzle failed';
+    else if (k === 'weekly') title = won === human ? 'Challenge won!' : 'Challenge lost';
+    else if (k === 'gauntlet') title = won === human ? `Round ${battle.round + 1} cleared!` : 'Gauntlet over';
+    else title = won === human ? 'Mission complete!' : 'Mission failed';
+  }
   $('over-title').textContent = title;
   $('over-reason').textContent = result.reason[0].toUpperCase() + result.reason.slice(1) + '.';
   sfx.fanfare(!vsAI || won === human);
   const sum = progress.endGame(result);
   renderSummary(sum);
   renderBattleResult(sum && sum.campaignResult);
+  renderChallengeResult(sum);
   reportLeaderboardScore(result);
   const tok = gameToken;
   setTimeout(() => {
@@ -912,6 +949,7 @@ function startGame(b = null) {
   battle = b;
   if (b) {
     st = R.fromPlacement(b.placement, b.mode);
+    if (b.rules) st.rules = { ...b.rules };
     vsAI = true;
     human = 'w';
     const base = typeof b.ai === 'object' ? b.ai.base : b.ai;
@@ -919,7 +957,7 @@ function startGame(b = null) {
     aiLevel = { ...DIFFICULTIES[base], ...(typeof b.ai === 'object' && b.ai.aim ? { aim: b.ai.aim } : {}) };
     aiName = b.foe;
   } else {
-    if (chosenMode === R.FOG && progress.level < FOG_LEVEL) chosenMode = R.CLASSIC;
+    if (chosenMode === R.FOG && !progress.perk('fog')) chosenMode = R.CLASSIC;
     st = R.newGame(chosenMode);
     vsAI = chosenOpp === 'ai';
     human = vsAI ? (chosenSide === 'r' ? (Math.random() < 0.5 ? 'w' : 'b') : chosenSide) : 'w';
@@ -928,8 +966,9 @@ function startGame(b = null) {
     aiName = DIFFICULTIES[difficulty].label;
   }
   fogView = vsAI ? human : 'w';
-  scene.fog.near = st.mode === R.FOG ? 7 : 18;
-  scene.fog.far = st.mode === R.FOG ? 26 : 55;
+  const baseFog = world.baseFog || { near: 18, far: 55 };
+  scene.fog.near = st.mode === R.FOG ? 7 : baseFog.near;
+  scene.fog.far = st.mode === R.FOG ? 26 : baseFog.far;
   graves = { w: [], b: [] };
   renderGraves();
   last = null;
@@ -1044,7 +1083,7 @@ window.addEventListener('keydown', (e) => {
   if (screen === 'title') return leaveTitle();
   if (k === 'escape') {
     // Close the topmost panel first.
-    for (const id of ['promo', 'help', 'settings', 'briefing', 'campaign', 'badges']) {
+    for (const id of ['promo', 'help', 'settings', 'briefing', 'campaign', 'challenges', 'badges']) {
       if (id === 'badges' && !$('shop').classList.contains('hidden')) return closeShop();
       if (id !== 'promo' && !$(id).classList.contains('hidden')) return closeOverlay(id);
     }
@@ -1089,7 +1128,7 @@ function showScreen(name) {
   $('btn-continue').classList.toggle('hidden', !(started && st && !st.result));
   if (name === 'pause') {
     const who = vsAI ? `vs ${aiName}, you play ${COLOR_NAME[human]}` : `${names.w} (White) vs ${names.b} (Black)`;
-    $('pause-info').textContent = `${battle ? `Campaign: ${battle.name} · ` : ''}${MODE_LABEL[st.mode]} · ${who} · turn ${Math.floor(st.ply / 2) + 1}`;
+    $('pause-info').textContent = `${battle ? `${battle.kind ? '' : 'Campaign: '}${battle.name} · ` : ''}${MODE_LABEL[st.mode]} · ${who} · turn ${Math.floor(st.ply / 2) + 1}`;
     renderContracts($('pause-contracts'), true);
   }
   if (name === 'main-menu') renderProfile();
@@ -1116,10 +1155,10 @@ function openSetup(opp) {
   $('local-options').classList.toggle('hidden', opp === 'ai');
   fillNames();
   $('opt-handoff').checked = handoffOn;
-  const fogLocked = progress.level < FOG_LEVEL;
+  const fogLocked = !progress.perk('fog');
   document.querySelector('[data-mode=fog]').classList.toggle('locked', fogLocked);
   $('fog-desc').textContent = fogLocked
-    ? `Unlocks at level ${FOG_LEVEL} (${rankOf(FOG_LEVEL)}). You're level ${progress.level}.`
+    ? `Unlocks at level ${PERKS.fog} (${rankOf(PERKS.fog)}). You're level ${progress.level}.`
     : 'MerciZero rules, but you only see what your pieces can see.';
   if (fogLocked && chosenMode === R.FOG) chosenMode = R.CLASSIC;
   selectIn('mode-choices', 'mode', chosenMode);
@@ -1303,6 +1342,8 @@ const progress = new Progress((e) => {
   else if (e.type === 'badge') toast(`<span class="t-icon">${e.badge.icon}</span><div><small>Badge unlocked · +${BADGE_XP} XP</small><b>${e.badge.name}</b><span>${e.badge.desc}</span></div>`, 'badge');
   else if (e.type === 'contract') toast(`<span class="t-icon">📋</span><div><small>Contract complete · +${e.contract.xp} XP</small><b>${e.contract.text}</b><span>Daily contract</span></div>`, 'badge');
   else if (e.type === 'reward') toast(`<span class="t-icon">🎁</span><div><small>Chapter ${e.chapter.id} complete</small><b>${e.skin.name} unlocked</b><span>Exclusive skin, equip it in the Shop.</span></div>`, 'level');
+  else if (e.type === 'mastery') toast(`<span class="t-icon">${pieceIcon(e.piece, 'w')}</span><div><small>${R.NAMES[e.piece]} mastery ${'I II III IV V'.split(' ')[e.tier - 1]}</small><b>${MASTERY_TIERS[e.tier - 1]} kills with the ${R.NAMES[e.piece].toLowerCase()}</b><span>${e.reward || '+' + 30 * e.tier + ' XP'}</span></div>`, 'badge');
+  else if (e.type === 'title') toast(`<span class="t-icon">🎖️</span><div><small>Title unlocked${e.title.xp ? ` · +${e.title.xp} XP` : ''}</small><b>${e.title.name}</b><span>${e.title.desc}</span></div>`, 'level');
   else if (e.type === 'level') {
     toast(`<span class="t-icon lvl">${e.level}</span><div><small>Level up!</small><b>${e.rank}</b><span>You reached level ${e.level}.</span></div>`, 'level');
     sfx.fanfare(true);
@@ -1333,7 +1374,8 @@ function xpPop(amount, label) {
   setTimeout(() => el.remove(), 1900);
 }
 
-function levelInfo(xp) {
+function levelInfo(rawXp) {
+  const xp = rawXp - progress.p.prestigeBase; // level counts from the last prestige
   const level = levelOf(xp);
   const lo = xpForLevel(level);
   const hi = xpForLevel(level + 1);
@@ -1346,6 +1388,9 @@ function renderProfile() {
   const unlocked = Object.keys(p.badges).length;
   $('pf-level').textContent = L.level;
   $('pf-rank').textContent = L.rank;
+  $('pf-prestige').textContent = p.prestige ? ` 💎${p.prestige > 1 ? '×' + p.prestige : ''}` : '';
+  $('pf-title').textContent = progress.titleName;
+  $('challenges-sub').textContent = `Puzzle ${p.puzzle.last === dayKey() ? '✓' : 'ready'} · ${weeklyFor(weekKey()).name} · Gauntlet ${p.gauntlet.best}/4`;
   $('pf-bar').style.width = `${L.frac * 100}%`;
   $('pf-xp').textContent = `${L.into} / ${L.need} XP`;
   $('pf-badges').innerHTML = `${icon('medal')}${unlocked}/${BADGES.length}`;
@@ -1361,6 +1406,7 @@ function renderBadges() {
   const L = levelInfo(p.xp);
   $('bd-level').textContent = L.level;
   $('bd-rank').textContent = L.rank;
+  renderProgressionExtras();
   $('bd-bar').style.width = `${L.frac * 100}%`;
   $('bd-xp').textContent = `${p.xp} XP earned · ${progress.balance} to spend`;
   $('bd-next').textContent = `${L.need - L.into} XP to level ${L.level + 1}`;
@@ -1466,6 +1512,14 @@ function rebuildPieces() {
 }
 
 function showSkin(cat, skin) {
+  if (cat === 'arena') {
+    applyArena(world, skin);
+    if (st && started && st.mode === R.FOG && !st.result) {
+      scene.fog.near = 7;
+      scene.fog.far = 26;
+    }
+    return;
+  }
   if (cat === 'pieces') {
     setPieceSkin(skin);
     rebuildPieces();
@@ -1496,7 +1550,15 @@ function renderShop() {
       else if (owned) action = `<button class="act equip" data-equip="${sk.id}">Equip</button>`;
       else if (can.ok) action = `<button class="act buy" data-buy="${sk.id}">Buy · ${sk.price} XP</button>`;
       else action = `<span class="state locked">${sk.level && progress.level < sk.level ? '🔒 ' : ''}${can.why}</span>`;
-      const price = owned ? (sk.price ? 'Owned' : 'Free') : `${sk.price} XP${sk.level ? ` · Lv ${sk.level}` : ''}`;
+      const price = sk.rank
+        ? `Free · unlocks at level ${sk.rank}`
+        : sk.campaign
+          ? `Campaign reward · chapter ${sk.campaign}`
+          : sk.prestige
+            ? 'Prestige reward'
+            : owned
+              ? sk.price ? 'Owned' : 'Free'
+              : `${sk.price} XP${sk.level ? ` · Lv ${sk.level}` : ''}`;
       const dots = swatches(shopTab, sk).map((c) => `<i style="background:#${c.toString(16).padStart(6, '0')}"></i>`).join('');
       return `<div class="skin ${isEq ? 'equipped' : ''} ${preview[shopTab] === sk.id ? 'previewing' : ''} ${owned ? 'owned' : ''}" data-preview="${sk.id}">
         <div class="sw">${dots}</div>
@@ -1677,9 +1739,194 @@ $('btn-br-play').addEventListener('click', () => {
   startGame(briefBattle);
 });
 $('btn-next-battle').addEventListener('click', () => {
+  if (battle && battle.kind === 'gauntlet') {
+    if (gauntletRun) startGame(gauntletBattle(gauntletRun.round, gauntletRun.lost));
+    return;
+  }
   const next = BATTLES[BATTLES.indexOf(battle) + 1];
   if (next) openBriefing(next);
 });
+
+
+// --- Challenges: daily puzzle, weekly challenge, gauntlet ----------------------------------
+
+let gauntletRun = null; // { round, lost: [piece types] } while a run is going
+
+function untilWeekEnd() {
+  const now = new Date();
+  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + (7 - ((now.getDay() + 6) % 7)));
+  const h = Math.max(0, Math.round((end - now) / 3600000));
+  return h >= 24 ? `${Math.floor(h / 24)}d ${h % 24}h` : `${h}h`;
+}
+function renderChallenges() {
+  const day = dayKey();
+  const pz = puzzleFor(day);
+  const z = progress.p.puzzle;
+  const solved = z.last === day;
+  $('ch-puzzle').innerHTML = `
+    <div class="ch-top"><span class="ch-kicker">Daily puzzle</span><span class="ch-streak ${z.streak && (solved || isYesterday(z.last)) ? 'on' : ''}">${icon('fire')}${solved || isYesterday(z.last) ? z.streak : 0}</span></div>
+    <b class="ch-name">${pz.name}</b>
+    <p>${pz.blurb}</p>
+    <div class="ch-meta"><span class="tag">${MODE_LABEL[pz.mode]}</span><span class="tag">Win within ${pz.turnLimit} turns</span></div>
+    <div class="ch-reward">${solved ? '✓ Solved today. New puzzle tomorrow.' : `+${PUZZLE_XP} XP, +20 per streak day`}</div>
+    <button class="primary" data-play="puzzle">${solved ? 'Play again' : 'Solve'}</button>`;
+  const wk = weekKey();
+  const w = weeklyFor(wk);
+  const claimed = progress.p.weekly.claimed === wk;
+  $('ch-weekly').innerHTML = `
+    <div class="ch-top"><span class="ch-kicker">Weekly challenge</span><span class="ch-time">${untilWeekEnd()} left</span></div>
+    <b class="ch-name">${w.name}</b>
+    <p>${w.desc}</p>
+    <div class="ch-meta"><span class="tag">MerciZero</span><span class="tag">vs Soldier</span></div>
+    <div class="ch-reward">${claimed ? '✓ Won this week. New rules on Monday.' : `+${WEEKLY_XP} XP for your first win this week`}</div>
+    <button class="primary" data-play="weekly">${claimed ? 'Play again' : 'Fight'}</button>`;
+  const gt = progress.p.gauntlet;
+  const steps = GAUNTLET.map((r, i) => {
+    const cls = gauntletRun ? (i < gauntletRun.round ? 'done' : i === gauntletRun.round ? 'now' : '') : i < gt.best ? 'best' : '';
+    return `<li class="${cls}"><span>${i + 1}</span>${r.foe}<b>+${GAUNTLET_XP[i]}</b></li>`;
+  }).join('');
+  const lost = gauntletRun && gauntletRun.lost.length ? `<div class="g-lost">Carrying losses: ${gauntletRun.lost.map((t) => pieceIcon(t, 'w')).join('')}</div>` : '';
+  $('ch-gauntlet').innerHTML = `
+    <div class="ch-top"><span class="ch-kicker">Gauntlet</span><span class="ch-time">Best ${gt.best}/4${gt.clears ? ` · cleared ${gt.clears}×` : ''}</span></div>
+    <b class="ch-name">Four in a row</b>
+    <p>Beat Recruit, Soldier, Sniper and Warlord back to back. Pieces you lose stay lost.</p>
+    <ol class="g-steps">${steps}</ol>${lost}
+    <button class="primary" data-play="gauntlet">${gauntletRun ? `Continue: round ${gauntletRun.round + 1}` : 'Start a run'}</button>
+    ${gauntletRun ? '<button class="secondary slim" data-play="gauntlet-new">Abandon and restart</button>' : ''}`;
+}
+function isYesterday(day) {
+  const y = new Date();
+  y.setDate(y.getDate() - 1);
+  return day === dayKey(y);
+}
+$('btn-challenges').addEventListener('click', () => {
+  sfx.click();
+  renderChallenges();
+  $('challenges').classList.remove('hidden');
+});
+$('btn-challenges-close').addEventListener('click', () => closeOverlay('challenges'));
+$('challenges').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-play]');
+  if (!b) return;
+  const what = b.dataset.play;
+  closeOverlay('challenges');
+  if (what === 'puzzle') startGame(puzzleBattle(dayKey()));
+  else if (what === 'weekly') startGame(weeklyBattle(weekKey()));
+  else {
+    if (what === 'gauntlet-new' || !gauntletRun) gauntletRun = { round: 0, lost: [] };
+    startGame(gauntletBattle(gauntletRun.round, gauntletRun.lost));
+  }
+});
+
+function renderChallengeResult(sum) {
+  const el = $('ov-challenge');
+  const r = sum && sum.challengeResult;
+  el.classList.toggle('hidden', !r);
+  if (!r) return;
+  let html = '';
+  if (r.kind === 'puzzle') {
+    html = r.failed ? 'Out of turns. Try again: the puzzle stays the same all day.' : r.already ? 'Solved again! (Today’s reward was already claimed.)' : `${icon('fire')} Streak: <b>${r.streak} day${r.streak > 1 ? 's' : ''}</b>`;
+  } else if (r.kind === 'weekly') {
+    html = !r.won ? 'The rules stay the same all week. Try again.' : r.already ? 'Won again! (This week’s reward was already claimed.)' : `Weekly reward claimed: <b>+${WEEKLY_XP} XP</b>`;
+  } else if (r.kind === 'gauntlet') {
+    if (!r.won) {
+      html = `Run over at round ${battle.round + 1}. Best: ${progress.p.gauntlet.best}/4.`;
+      gauntletRun = null;
+    } else if (r.cleared) {
+      html = '🏆 <b>Gauntlet cleared!</b> All four computer levels beaten in one run.';
+      gauntletRun = null;
+    } else {
+      const lost = [...battle.lost, ...(sum.lostTypes || [])];
+      gauntletRun = { round: battle.round + 1, lost };
+      const next = GAUNTLET[gauntletRun.round];
+      html = `Next: <b>${next.foe}</b>${lost.length ? `, carrying ${lost.length} lost piece${lost.length > 1 ? 's' : ''}` : ''}.`;
+      $('btn-next-battle').classList.remove('hidden');
+      $('btn-next-battle').lastChild.textContent = `Round ${gauntletRun.round + 1}: ${next.foe}`;
+    }
+  }
+  el.innerHTML = html;
+}
+
+// --- Titles, mastery, prestige (Badges & Stats screen) --------------------------------------
+
+const ROMAN = ['—', 'I', 'II', 'III', 'IV', 'V'];
+function renderProgressionExtras() {
+  const p = progress.p;
+  $('bd-prestige-stars').textContent = p.prestige ? '💎'.repeat(Math.min(p.prestige, 5)) + (p.prestige > 5 ? `×${p.prestige}` : '') : '';
+  $('bd-prestige').innerHTML = progress.canPrestige
+    ? `<div class="prestige ready"><div><b>Prestige available</b><span>Reset your level to 1 for a 💎, the exclusive Prestige pieces and a title. You keep your XP to spend, skins, badges, campaign and perks.</span></div><button class="primary" id="btn-prestige">💎 Prestige</button></div>`
+    : `<div class="prestige"><div><b>Prestige at level ${PRESTIGE_LEVEL}</b><span>${p.prestige ? `Prestiged ${p.prestige}×. ` : ''}You're level ${progress.level}. Prestige resets your level for a 💎 and exclusive rewards.</span></div></div>`;
+  const pb = $('btn-prestige');
+  if (pb) {
+    pb.addEventListener('click', () => {
+      if (!confirm('Prestige now? Your level goes back to 1. You keep your XP to spend, skins, badges, campaign progress and rank perks.')) return;
+      progress.prestigeNow();
+      sfx.fanfare(true);
+      renderBadges();
+      renderProfile();
+    });
+  }
+  $('bd-titles').innerHTML = [{ id: '', name: 'No title', desc: 'Show only your rank.' }, ...TITLES]
+    .map((t) => {
+      const got = t.id === '' || p.titles[t.id];
+      const on = p.title === t.id;
+      return `<button class="title-chip ${got ? '' : 'locked'} ${on ? 'on' : ''}" data-title="${t.id}" ${got ? '' : 'disabled'} title="${t.desc}"><b>${got ? '' : '🔒 '}${t.name}</b><span>${t.desc}</span></button>`;
+    })
+    .join('');
+  $('bd-mastery').innerHTML = ['p', 'n', 'b', 'r', 'q', 'k']
+    .map((t) => {
+      const kills = p.mastery[t];
+      const tier = masteryTier(kills);
+      const next = MASTERY_TIERS[tier];
+      const prev = tier ? MASTERY_TIERS[tier - 1] : 0;
+      const frac = next ? (kills - prev) / (next - prev) : 1;
+      const perks = [tier >= 3 ? '<span class="perk on">Tracers</span>' : '<span class="perk">III: tracers</span>', tier >= 5 ? '<span class="perk on">Gold trim</span>' : '<span class="perk">V: gold trim</span>'].join('');
+      return `<div class="m-row"><span class="m-icon">${pieceIcon(t, 'w')}</span><div class="m-main"><div class="m-top"><b>${R.NAMES[t]}</b><span class="m-tier t${tier}">${ROMAN[tier]}</span><span class="m-kills">${kills}${next ? ` / ${next}` : ''} kills</span></div><div class="mini"><div style="width:${frac * 100}%"></div></div><div class="m-perks">${perks}</div></div></div>`;
+    })
+    .join('');
+}
+$('bd-titles').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-title]');
+  if (!b || b.disabled) return;
+  sfx.click();
+  progress.setTitle(b.dataset.title);
+  renderProgressionExtras();
+  renderProfile();
+});
+
+// --- Settings: music track and kill-cam (rank perks) ----------------------------------------
+
+function renderPerkSettings() {
+  $('opt-track').innerHTML = TRACKS.map((t) => {
+    const ok = progress.rankLevel >= t.rank;
+    return `<option value="${t.id}" ${ok ? '' : 'disabled'} ${settings.track === t.id ? 'selected' : ''}>${ok ? '' : '🔒 '}${t.name}${ok ? '' : ` (level ${t.rank})`}</option>`;
+  }).join('');
+  const locked = TRACKS.filter((t) => progress.rankLevel < t.rank);
+  $('track-note').textContent = locked.length ? `More tracks unlock as you rank up` : 'All tracks unlocked';
+  const kc = progress.perk('killcam');
+  $('opt-killcam').disabled = !kc;
+  $('opt-killcam').checked = kc && settings.killcam;
+  $('killcam-note').textContent = kc ? 'Follow the bullet on long kills' : `🔒 Unlocks at level ${PERKS.killcam}`;
+}
+function applyTrack() {
+  const t = TRACKS.find((x) => x.id === settings.track);
+  sfx.music.setTrack(t && progress.rankLevel >= t.rank ? t.id : 'march');
+}
+$('opt-track').addEventListener('change', () => {
+  settings.track = $('opt-track').value;
+  savePref('gunmate-track', settings.track);
+  applyTrack();
+});
+$('opt-killcam').addEventListener('change', () => {
+  settings.killcam = $('opt-killcam').checked;
+  savePref('gunmate-killcam', settings.killcam ? '1' : '0');
+});
+$('btn-settings').addEventListener('click', renderPerkSettings);
+$('btn-pause-settings').addEventListener('click', renderPerkSettings);
+applyTrack();
+// Award titles players already qualify for (e.g. collections finished before titles existed).
+progress.checkTitles();
+renderProfile();
 
 // --- Main loop -----------------------------------------------------------------------------
 
@@ -1713,6 +1960,12 @@ function frame() {
   camera.fov += (targetFov - camera.fov) * Math.min(1, dt * 10);
   camera.updateProjectionMatrix();
   desiredPose(_pos, _quat);
+  if (killcam) {
+    _pos.copy(killcam.head).addScaledVector(killcam.dir, -0.9);
+    _pos.y += 0.12;
+    _m.lookAt(_pos, killcam.head.clone().addScaledVector(killcam.dir, 2), _up);
+    _quat.setFromRotationMatrix(_m);
+  }
   let blend = 1;
   if (trans) {
     trans.t += dt;
@@ -1749,7 +2002,7 @@ function frame() {
 
   renderer.clear();
   renderer.render(scene, camera);
-  if (viewGun && viewMode === 'pov' && blend > 0.8) {
+  if (viewGun && viewMode === 'pov' && blend > 0.8 && !killcam) {
     viewKick = Math.max(0, viewKick - dt * 6);
     const bob = Math.sin(time * 1.6) * 0.004;
     viewGun.position.set(0.17, -0.15 + bob - viewKick * 0.012, -0.36 + viewKick * 0.06);
@@ -1763,7 +2016,7 @@ function frame() {
 }
 
 // Read-only hook for automated play-testing.
-window.__gunmate = { state: () => st, legal: () => (st ? R.legalActions(st) : []), busy: () => busy, music: sfx.music, progress: () => progress, fog: () => ({ hidden: [...fogHidden], hiddenGroups: [...groups.values()].filter((g) => !g.visible).length }), tile: (i) => { const m = tiles[i].material; return { c: m.color.getHexString(), e: m.emissive.getHexString(), ei: m.emissiveIntensity, r: m.roughness }; }, cam: () => ({ pos: camera.position.toArray().map((v) => +v.toFixed(2)), povId, viewMode, yaw: +yaw.toFixed(2), pitch: +pitch.toFixed(2) }) };
+window.__gunmate = { state: () => st, legal: () => (st ? R.legalActions(st) : []), busy: () => busy, music: sfx.music, progress: () => progress, start: (b) => startGame({ kind: 'test', name: 'Test', foe: 'Test', ai: 'easy', mode: R.MERCIZERO, ...b }), killcam: () => !!killcam, fog: () => ({ hidden: [...fogHidden], hiddenGroups: [...groups.values()].filter((g) => !g.visible).length }), tile: (i) => { const m = tiles[i].material; return { c: m.color.getHexString(), e: m.emissive.getHexString(), ei: m.emissiveIntensity, r: m.roughness }; }, cam: () => ({ pos: camera.position.toArray().map((v) => +v.toFixed(2)), povId, viewMode, yaw: +yaw.toFixed(2), pitch: +pitch.toFixed(2) }) };
 
 // Show the board (slowly orbiting) behind the menu.
 st = R.newGame(R.CLASSIC);

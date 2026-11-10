@@ -30,15 +30,18 @@ export class Fx {
     this.items.push({ kind: 'flash', mesh: m, life: 0.08, max: 0.08 });
   }
 
-  // A bullet streak flying from a to b. Resolves when it arrives.
-  tracer(a, b, speed = 38) {
+  // A bullet streak flying from a to b. Resolves when it arrives. `onMove(head)` gets the bullet's
+  // position every frame (the kill-cam follows it).
+  tracer(a, b, speed = 38, color = null, onMove = null) {
     return new Promise((resolve) => {
       const dir = new THREE.Vector3().subVectors(b, a);
       const len = dir.length();
-      const m = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 1, 4), this.tracerMat.clone());
+      const mat = this.tracerMat.clone();
+      if (color != null) mat.color.setHex(color);
+      const m = new THREE.Mesh(new THREE.CylinderGeometry(color != null ? 0.018 : 0.012, color != null ? 0.018 : 0.012, 1, 4), mat);
       m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize());
       this.scene.add(m);
-      this.items.push({ kind: 'tracer', mesh: m, a: a.clone(), dir: dir.normalize(), len, d: 0, speed, resolve });
+      this.items.push({ kind: 'tracer', mesh: m, a: a.clone(), dir: dir.normalize(), len, d: 0, speed, resolve, onMove });
     });
   }
 
@@ -112,6 +115,7 @@ export class Fx {
         const tail = Math.max(0, head - 0.9);
         m.position.copy(it.a).addScaledVector(it.dir, (head + tail) / 2);
         m.scale.y = Math.max(0.01, head - tail);
+        if (it.onMove) it.onMove(it.a.clone().addScaledVector(it.dir, head), it.dir);
         if (it.d >= it.len) {
           if (it.resolve) {
             it.resolve();

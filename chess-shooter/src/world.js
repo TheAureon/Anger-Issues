@@ -15,6 +15,7 @@ export function buildWorld(scene) {
   scene.fog = new THREE.Fog(0x9fc4d8, 18, 55);
 
   const hemi = new THREE.HemisphereLight(0xdcefff, 0x5a4a3a, 1.1);
+  const trees = [];
   scene.add(hemi);
   const sun = new THREE.DirectionalLight(0xfff1d6, 2.2);
   sun.position.set(6, 12, 4);
@@ -80,7 +81,8 @@ export function buildWorld(scene) {
   }
 
   // Plateau under the board.
-  const plateau = new THREE.Mesh(new THREE.CylinderGeometry(7.5, 9, 1.2, 9), flat(0x7d8a5a));
+  const plateauMat = flat(0x7d8a5a);
+  const plateau = new THREE.Mesh(new THREE.CylinderGeometry(7.5, 9, 1.2, 9), plateauMat);
   plateau.position.y = -0.85;
   plateau.receiveShadow = true;
   scene.add(plateau);
@@ -98,7 +100,8 @@ export function buildWorld(scene) {
     pos.setY(i, -1.6 + (d > 10 ? (hills + lift) * Math.min(1, (d - 10) / 10) : 0) + (rand() - 0.5) * 0.4);
   }
   groundGeo.computeVertexNormals();
-  const ground = new THREE.Mesh(groundGeo, flat(0x6f8a4c));
+  const groundMat = flat(0x6f8a4c);
+  const ground = new THREE.Mesh(groundGeo, groundMat);
   ground.receiveShadow = true;
   scene.add(ground);
 
@@ -136,6 +139,8 @@ export function buildWorld(scene) {
       }
       tree.position.set(x, y, z);
       tree.scale.setScalar(s);
+      tree.userData.baseScale = s;
+      trees.push(tree);
       tree.rotation.y = rand() * 6;
       scene.add(tree);
     } else {
@@ -173,7 +178,7 @@ export function buildWorld(scene) {
     scene.add(cl);
   }
 
-  return { tiles, sun, frameMat };
+  return { tiles, sun, hemi, frameMat, groundMat, plateauMat, leafMats, trunkMat, rockMat, cloudMat, trees, scene };
 }
 
 // Restyle the board for a shop skin. Tiles keep their own materials; refresh() tints from baseColor.
@@ -183,4 +188,24 @@ export function applyBoardSkin(world, skin) {
     t.userData.baseColor.copy(t.material.color);
   }
   applySpec(world.frameMat, skin.frame);
+}
+
+// Restyle the surroundings for an arena (see ARENAS in skins.js).
+export function applyArena(world, a) {
+  const { scene } = world;
+  scene.background.setHex(a.sky);
+  scene.fog.color.setHex(a.sky);
+  world.baseFog = { near: a.fogNear, far: a.fogFar };
+  scene.fog.near = a.fogNear;
+  scene.fog.far = a.fogFar;
+  world.groundMat.color.setHex(a.ground);
+  world.plateauMat.color.setHex(a.plateau);
+  world.leafMats.forEach((m, i) => m.color.setHex(a.leaves[i % a.leaves.length]));
+  world.trunkMat.color.setHex(a.trunk);
+  world.rockMat.color.setHex(a.rock);
+  world.cloudMat.color.setHex(a.cloud);
+  world.sun.color.setHex(a.sun);
+  world.sun.intensity = a.sunI;
+  world.hemi.intensity = a.hemiI;
+  for (const t of world.trees) t.scale.setScalar(t.userData.baseScale * a.treeScale);
 }
