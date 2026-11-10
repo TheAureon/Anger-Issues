@@ -57,9 +57,11 @@ itself never does. Opened on its own, nothing is sent.
 | Rotate a held piece | <kbd>R</kbd> roll, <kbd>F</kbd> turn | ⟳ / ⇆ buttons |
 | Push / pull a held piece | Scroll | – |
 | Orbit camera | Drag empty space, or right-drag | One finger on empty space |
+| Pick a tool | <kbd>1</kbd>–<kbd>9</kbd> within the current category | Tap a tile |
 | Move camera | <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> up / left / down / right, <kbd>Q</kbd> / <kbd>E</kbd> out / in (<kbd>Shift</kbd> = faster) | – |
 | Zoom / pan | Scroll / middle-drag | Two fingers |
 | New mannequin · clear props · slow-mo | <kbd>X</kbd> · <kbd>C</kbd> · <kbd>T</kbd> | Top-right buttons |
+| Close a panel | <kbd>Esc</kbd> | Tap outside it |
 
 **Rebuilding:** drag a loose piece over the body. A green ring shows where its cut end will stick.
 Let go and it attaches there, keeping the orientation you gave it, so a head can go on backwards and
@@ -100,8 +102,14 @@ There are 31 badges (*Heads Will Roll*, *Wrong Way Round*, *Pancake*, *Bullseye*
 profile: rank, XP, lifetime stats, and every badge with progress bars. Progress is saved locally and
 can be reset from the profile.
 
-**Name it:** the 🏷️ button in the top bar (or a click on the floating name tag above its head) opens
-a name box, with a 🎲 for random suggestions. The name stays over its head, even when that head is
+**Interface:** the top bar shows the logo and your level and XP on the left, and New mannequin, Clear,
+Slow-mo and ⚙️ Settings on the right. Settings slides in from the right (a bottom sheet on phones) and
+holds the name, look, room, gore, joints, music and sound, plus links to your badges and the help
+card. Tools sit in a dock at the bottom: category tabs, big tiles for the tools in that category,
+and the selected tool's tip above them. Number keys pick a tool within the current category.
+
+**Name it:** in ⚙️ Settings (or click the floating name tag above its head), with a 🎲 for random
+suggestions. The name stays over its head, even when that head is
 rolling around on its own, and it's remembered next time you play.
 
 **It has a mind of its own:** the mannequin balances on its own feet and wanders around the room,

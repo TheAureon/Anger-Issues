@@ -372,7 +372,7 @@ export class Progress {
     chip.className = 'pill lvl-chip';
     chip.title = 'Your rank and badges';
     chip.onclick = () => this.openPanel();
-    ui.root.querySelector('.topbar .group').prepend(chip);
+    (ui.hudSlot || ui.root.querySelector('.topbar')).append(chip);
     this.chip = chip;
     this.comboEl = document.createElement('div');
     this.comboEl.className = 'combo';

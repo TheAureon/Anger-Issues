@@ -13,6 +13,8 @@ function el(tag, cls, html) {
   return e;
 }
 
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+
 export class UI {
   constructor(game) {
     this.game = game;
@@ -21,130 +23,143 @@ export class UI {
     game.container.appendChild(root);
     this.root = root;
 
-    // Top bar
+    /* ------------------------------ top bar ------------------------------ */
     const top = el('div', 'topbar');
-    top.append(el('div', 'brand', 'Anger&nbsp;Issues'));
-    const left = el('div', 'group');
-    this.roomBtn = el('button', 'pill');
-    this.roomBtn.onclick = () => this.openMenu('room');
-    this.skinBtn = el('button', 'pill');
-    this.skinBtn.onclick = () => this.openMenu('skin');
-    this.nameBtn = el('button', 'pill name-pill');
-    this.nameBtn.title = 'Name the mannequin';
-    this.nameBtn.onclick = () => this.openNamer();
-    left.append(this.nameBtn, this.roomBtn, this.skinBtn);
-    top.append(left);
-    const actions = el('div', 'group actions');
-    const btn = (icon, title, fn) => {
-      const b = el('button', 'icon', icon);
-      b.title = title;
-      b.setAttribute('aria-label', title);
+    const left = el('div', 'hud-left');
+    left.append(el('div', 'brand-mark', '<span>ANGER</span><span>ISSUES</span>'));
+    this.hudSlot = el('div', 'hud-slot'); // the level chip (progress.js) goes here
+    left.append(this.hudSlot);
+    const right = el('div', 'hud-right');
+    const action = (icon, label, key, fn, cls = '') => {
+      const b = el('button', `hud-btn ${cls}`, `<span class="ic">${icon}</span>`);
+      b.dataset.tip = key ? `${label}  ·  ${key}` : label;
+      b.setAttribute('aria-label', label);
       b.onclick = fn;
-      actions.append(b);
+      right.append(b);
       return b;
     };
-    btn('↺', 'New mannequin (X)', () => game.resetMannequin());
-    btn('🧹', 'Clear props & machines (C)', () => game.clearProps());
-    this.slowBtn = btn('🐢', 'Slow motion (T)', () => game.toggleSlowmo());
-    this.stiffBtn = btn('🦴', 'Joint stiffness', () => this.cycleStiffness());
-    this.goreBtn = btn('🩸', 'Gore: off / cartoon / slime / rainbow', () => {
-      const m = game.gore.cycle();
-      this.flashWord(m.label, true);
-      this.update();
-    });
-    this.musicBtn = btn('🎵', 'Music on/off', () => {
-      game.music.setEnabled(!game.music.enabled);
-      this.flashWord(game.music.enabled ? 'Music on' : 'Music off', true);
-      this.update();
-    });
-    this.soundBtn = btn('🔊', 'Sound on/off', () => {
-      game.sfx.setEnabled(!game.sfx.enabled);
-      this.update();
-    });
-    btn('?', 'Help (H)', () => this.toggleHelp());
-    top.append(actions);
+    action('↺', 'New mannequin', 'X', () => game.resetMannequin());
+    action('🧹', 'Clear props & machines', 'C', () => game.clearProps());
+    this.slowBtn = action('🐢', 'Slow motion', 'T', () => game.toggleSlowmo());
+    this.settingsBtn = action('⚙️', 'Settings', '', () => this.toggleSettings(), 'primary');
+    top.append(left, right);
     root.append(top);
 
-    // Menus
-    this.menu = el('div', 'menu hidden');
-    root.append(this.menu);
-
-    // Name tag floating over the head, and the rename dialog.
-    this.nametag = el('button', 'nametag hidden');
-    this.nametag.title = 'Click to rename';
-    this.nametag.onclick = () => this.openNamer();
-    root.append(this.nametag);
-    this.namer = el(
-      'div',
-      'namer hidden',
-      `<form class="card">
-        <label for="ai-name-input">Name your mannequin</label>
-        <div class="row">
-          <input id="ai-name-input" maxlength="20" autocomplete="off" spellcheck="false" placeholder="e.g. Gerald" />
-          <button type="button" class="icon dice" title="Random name" aria-label="Random name">🎲</button>
+    /* ------------------------------ settings ------------------------------ */
+    this.settings = el('div', 'sheet-wrap hidden');
+    this.settings.innerHTML = `
+      <aside class="sheet" role="dialog" aria-label="Settings">
+        <header class="sheet-head">
+          <h2>Settings</h2>
+          <button class="hud-btn sheet-close" aria-label="Close settings"><span class="ic">✕</span></button>
+        </header>
+        <div class="sheet-body">
+          <section>
+            <h3>Mannequin</h3>
+            <div class="field">
+              <input id="ai-name-input" class="name-input" maxlength="20" autocomplete="off" spellcheck="false" placeholder="Give it a name" aria-label="Mannequin name" />
+              <button type="button" class="soft-btn dice" title="Random name" aria-label="Random name">🎲</button>
+            </div>
+            <div class="chips skins"></div>
+          </section>
+          <section>
+            <h3>Room</h3>
+            <div class="rooms-grid"></div>
+          </section>
+          <section>
+            <h3>Gore</h3>
+            <div class="seg gore"></div>
+          </section>
+          <section>
+            <h3>Joints</h3>
+            <div class="seg joints"></div>
+          </section>
+          <section>
+            <h3>Audio</h3>
+            <label class="switch-row"><span>🎵 Music</span><input type="checkbox" class="sw music" /><i></i></label>
+            <label class="switch-row"><span>🔊 Sound effects</span><input type="checkbox" class="sw sound" /><i></i></label>
+          </section>
+          <section class="sheet-links">
+            <button class="soft-btn wide open-profile">🏅 Rank &amp; badges</button>
+            <button class="soft-btn wide open-help">❔ How to play &amp; controls</button>
+          </section>
         </div>
-        <div class="row end">
-          <button type="button" class="pill cancel">Cancel</button>
-          <button type="submit" class="pill go">Save</button>
-        </div>
-      </form>`,
-    );
-    this.nameInput = this.namer.querySelector('input');
-    this.namer.querySelector('form').onsubmit = (e) => {
-      e.preventDefault();
-      this.saveName();
+      </aside>`;
+    root.append(this.settings);
+    const S = this.settings;
+    S.onclick = (e) => {
+      if (e.target === S || e.target.closest('.sheet-close')) this.toggleSettings(false);
     };
-    this.namer.querySelector('.cancel').onclick = () => this.closeNamer();
-    this.namer.querySelector('.dice').onclick = () => {
-      this.nameInput.value = NAMES[(Math.random() * NAMES.length) | 0];
-      this.nameInput.focus();
-    };
-    this.namer.onclick = (e) => {
-      if (e.target === this.namer) this.closeNamer();
+    this.nameInput = S.querySelector('.name-input');
+    this.nameInput.oninput = () => {
+      game.mannequin.setName(this.nameInput.value);
+      this.nametag.textContent = game.mannequin.name;
     };
     this.nameInput.onkeydown = (e) => {
-      if (e.key === 'Escape') this.closeNamer();
       e.stopPropagation();
+      if (e.key === 'Enter' || e.key === 'Escape') this.nameInput.blur();
     };
-    root.append(this.namer);
-    document.addEventListener('pointerdown', (e) => {
-      if (!this.menu.contains(e.target) && e.target !== this.roomBtn && e.target !== this.skinBtn) this.menu.classList.add('hidden');
-    });
+    this.nameInput.onchange = () => {
+      if (game.mannequin.name) this.flashWord(`Hi, ${game.mannequin.name}!`, true);
+    };
+    S.querySelector('.dice').onclick = () => {
+      this.nameInput.value = NAMES[(Math.random() * NAMES.length) | 0];
+      this.nameInput.oninput();
+      this.nameInput.onchange();
+    };
+    S.querySelector('.sw.music').onchange = (e) => {
+      game.sfx.unlock();
+      game.music.setEnabled(e.target.checked);
+    };
+    S.querySelector('.sw.sound').onchange = (e) => {
+      game.sfx.unlock();
+      game.sfx.setEnabled(e.target.checked);
+    };
+    S.querySelector('.open-profile').onclick = () => {
+      this.toggleSettings(false);
+      game.progress?.openPanel();
+    };
+    S.querySelector('.open-help').onclick = () => {
+      this.toggleSettings(false);
+      this.toggleHelp(true);
+    };
 
-    // Word pop
+    /* ------------------------------ in-world ------------------------------ */
+    this.nametag = el('button', 'nametag hidden');
+    this.nametag.title = 'Rename';
+    this.nametag.onclick = () => this.openNamer();
+    root.append(this.nametag);
+
     this.word = el('div', 'word');
     root.append(this.word);
 
-    // Hold controls (rotate held piece; mostly for touch)
     this.hold = el('div', 'hold hidden');
-    const r1 = el('button', 'icon', '⟳');
-    r1.title = 'Roll held piece (R)';
-    r1.onpointerdown = (e) => {
-      e.stopPropagation();
-      game.grabber.rotate('roll');
+    const holdBtn = (icon, label, kind) => {
+      const b = el('button', 'hud-btn big', `<span class="ic">${icon}</span><small>${label}</small>`);
+      b.onpointerdown = (e) => {
+        e.stopPropagation();
+        game.grabber.rotate(kind);
+      };
+      this.hold.append(b);
     };
-    const r2 = el('button', 'icon', '⇆');
-    r2.title = 'Turn held piece (F)';
-    r2.onpointerdown = (e) => {
-      e.stopPropagation();
-      game.grabber.rotate('turn');
-    };
-    this.hold.append(r1, r2);
+    holdBtn('⟳', 'Roll · R', 'roll');
+    holdBtn('⇆', 'Turn · F', 'turn');
     root.append(this.hold);
 
-    // Toolbox
-    const box = el('div', 'toolbox');
-    this.hint = el('div', 'hint');
-    this.cats = el('div', 'cats');
-    this.toolRow = el('div', 'tools');
-    box.append(this.hint, this.toolRow, this.cats);
-    root.append(box);
-    this.cat = 'hand';
+    /* ------------------------------ tool dock ------------------------------ */
+    const dock = el('div', 'dock');
+    this.caption = el('div', 'dock-caption');
+    this.toolRow = el('div', 'dock-tools');
+    this.cats = el('div', 'dock-cats');
+    this.catInk = el('span', 'cat-ink');
+    this.cats.append(this.catInk);
+    dock.append(this.caption, this.toolRow, this.cats);
+    root.append(dock);
+    this.dock = dock;
     this.catBtns = {};
     for (const c of CATEGORIES) {
-      const b = el('button', 'cat', `<span>${c.icon}</span><small>${c.name}</small>`);
+      const b = el('button', 'cat', `<span class="ic">${c.icon}</span><small>${c.name}</small>`);
       b.onclick = () => {
-        this.cat = c.id;
         const first = game.tools.find((t) => t.cat === c.id);
         if (first && game.tool.cat !== c.id) game.setTool(first);
         this.update();
@@ -152,23 +167,27 @@ export class UI {
       this.catBtns[c.id] = b;
       this.cats.append(b);
     }
+    window.addEventListener('resize', () => this.placeInk());
 
-    // Help
+    /* ------------------------------ help ------------------------------ */
+    const k = (s) => s.split(' ').map((x) => `<kbd>${x}</kbd>`).join('');
     this.help = el(
       'div',
       'help hidden',
       `<div class="card">
-        <h2>Anger Issues</h2>
-        <p>Vent on the mannequin. It walks around on its own and it's scared of you. Fair enough. Wreck it, then rebuild it any way you like. Nothing to unlock, no timer, no fail state.</p>
-        <ul>
-          <li><b>Name it</b> with the 🏷️ button (or click its name tag).</li>
-          <li><b>Pick a tool</b> from the toolbox at the bottom and use it on the mannequin.</li>
-          <li><b>Grab</b> (✋, or hold <kbd>Shift</kbd> with any tool) drags and flings pieces.</li>
-          <li><b>Rebuild:</b> drag a loose piece onto the body. When the green ring shows, let go and it sticks there. Rotate it first with <kbd>R</kbd> / <kbd>F</kbd> (or the ⟳ ⇆ buttons) to put a head on backwards.</li>
-          <li><b>Camera:</b> <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move it across the screen, <kbd>Q</kbd> / <kbd>E</kbd> move it out / in (hold <kbd>Shift</kbd> for faster). Drag empty space or right-drag to orbit, scroll to zoom. On touch: two fingers to zoom/pan.</li>
-          <li><kbd>X</kbd> new mannequin · <kbd>C</kbd> clear props · <kbd>T</kbd> slow-mo · <kbd>Esc</kbd> grab tool</li>
-        </ul>
-        <button class="pill go">Let's go</button>
+        <div class="help-head">
+          <div class="brand-mark big"><span>ANGER</span><span>ISSUES</span></div>
+          <p>It walks around on its own, and it's scared of you. Fair enough. Wreck it, then rebuild it any way you like. Nothing to unlock, no timer, no fail state.</p>
+        </div>
+        <div class="help-grid">
+          <div><span class="hi">🧰</span><b>Use a tool</b><p>Pick one from the dock at the bottom (or ${k('1')}–${k('9')}) and click or tap the mannequin.</p></div>
+          <div><span class="hi">✋</span><b>Grab &amp; fling</b><p>The Grab tool, or hold ${k('Shift')} with any tool.</p></div>
+          <div><span class="hi">🧩</span><b>Rebuild</b><p>Drag a loose piece onto the body. Let go when the green ring shows. ${k('R')} ${k('F')} rotate it first.</p></div>
+          <div><span class="hi">🎥</span><b>Camera</b><p>${k('W A S D')} move, ${k('Q')} ${k('E')} out / in. Drag empty space to orbit, scroll to zoom. Touch: two fingers.</p></div>
+          <div><span class="hi">⚡</span><b>Shortcuts</b><p>${k('X')} new mannequin · ${k('C')} clear · ${k('T')} slow-mo · ${k('Esc')} grab</p></div>
+          <div><span class="hi">⚙️</span><b>Settings</b><p>Name it, change room or look, gore, joints and audio.</p></div>
+        </div>
+        <button class="cta go">Let's go</button>
       </div>`,
     );
     this.help.onclick = (e) => {
@@ -183,32 +202,68 @@ export class UI {
     }
     this.helpSeen = seen;
 
+    // Number keys pick a tool in the current category; Esc closes panels.
+    window.addEventListener('keydown', (e) => {
+      if (e.target.tagName === 'INPUT' || game.title?.active) return;
+      if (e.key === 'Escape') {
+        this.toggleSettings(false);
+        this.toggleHelp(false);
+        game.progress?.panel?.classList.add('hidden');
+      }
+      if (/^[1-9]$/.test(e.key) && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        const t = game.tools.filter((x) => x.cat === game.tool.cat)[Number(e.key) - 1];
+        if (t) game.setTool(t);
+      }
+    });
+
     this.update();
   }
 
+  /* ------------------------------ settings ------------------------------ */
+
+  toggleSettings(force) {
+    const show = force ?? this.settings.classList.contains('hidden');
+    if (show) this.renderSettings();
+    this.settings.classList.toggle('hidden', !show);
+    this.settingsBtn.classList.toggle('on', show);
+  }
+
+  renderSettings() {
+    const game = this.game;
+    const S = this.settings;
+    if (document.activeElement !== this.nameInput) this.nameInput.value = game.mannequin.name;
+    const opts = (box, entries, current, pick, cls) => {
+      box.innerHTML = '';
+      for (const [id, d] of Object.entries(entries)) {
+        const b = el('button', `${cls}${id === current ? ' on' : ''}`, `<span class="ic">${d.icon ?? ''}</span><span>${esc(d.name)}</span>`);
+        b.onclick = () => {
+          game.sfx.click();
+          pick(id);
+          this.renderSettings();
+          this.update();
+        };
+        box.append(b);
+      }
+    };
+    opts(S.querySelector('.skins'), SKINS, game.mannequin.skinId, (id) => game.mannequin.setSkin(id), 'chip');
+    opts(S.querySelector('.rooms-grid'), ROOMS, game.roomId, (id) => game.setRoom(id), 'room-card');
+    const gore = Object.fromEntries(Object.entries(GORE_MODES).map(([id, m]) => [id, { icon: m.icon, name: id === 'off' ? 'Off' : id === 'ketchup' ? 'Cartoon' : m.label.replace(/ gore$/, '') }]));
+    opts(S.querySelector('.gore'), gore, game.gore.mode, (id) => game.gore.setMode(id), 'seg-btn');
+    const joints = Object.fromEntries(Object.entries(STIFFNESS).map(([id, s]) => [id, { icon: { stiff: '🪵', loose: '🧦', ragdoll: '🫠' }[id], name: s.label }]));
+    opts(S.querySelector('.joints'), joints, game.joints.stiffnessId, (id) => game.joints.setStiffness(id), 'seg-btn');
+    S.querySelector('.sw.music').checked = !!game.music?.enabled;
+    S.querySelector('.sw.sound').checked = game.sfx.enabled;
+  }
+
   openNamer() {
-    this.menu.classList.add('hidden');
-    this.nameInput.value = this.game.mannequin.name;
-    this.namer.classList.remove('hidden');
+    this.toggleSettings(true);
     this.nameInput.focus();
     this.nameInput.select();
   }
 
-  closeNamer() {
-    this.namer.classList.add('hidden');
-    this.nameInput.blur();
-  }
+  /* ------------------------------ per frame ------------------------------ */
 
-  saveName() {
-    const m = this.game.mannequin;
-    const before = m.name;
-    m.setName(this.nameInput.value);
-    this.closeNamer();
-    if (m.name && m.name !== before) this.flashWord(`Hi, ${m.name}!`, true);
-    this.update();
-  }
-
-  /** Per frame: keep the name tag over the head. */
+  /** Keep the name tag over the head. */
   tick() {
     const game = this.game;
     const head = game.mannequin.byName?.head;
@@ -248,34 +303,6 @@ export class UI {
     }
   }
 
-  openMenu(kind) {
-    const m = this.menu;
-    const game = this.game;
-    if (!m.classList.contains('hidden') && m.dataset.kind === kind) {
-      m.classList.add('hidden');
-      return;
-    }
-    m.dataset.kind = kind;
-    m.innerHTML = '';
-    const entries = kind === 'room' ? ROOMS : SKINS;
-    const current = kind === 'room' ? game.roomId : game.mannequin.skinId;
-    for (const [id, def] of Object.entries(entries)) {
-      const b = el('button', 'item' + (id === current ? ' on' : ''), `<span>${def.icon}</span> ${def.name}`);
-      b.onclick = () => {
-        if (kind === 'room') game.setRoom(id);
-        else game.mannequin.setSkin(id);
-        m.classList.add('hidden');
-        this.update();
-      };
-      m.append(b);
-    }
-    const anchor = kind === 'room' ? this.roomBtn : this.skinBtn;
-    const r = anchor.getBoundingClientRect();
-    m.style.left = r.left + 'px';
-    m.style.top = r.bottom + 6 + 'px';
-    m.classList.remove('hidden');
-  }
-
   cycleStiffness() {
     const ids = Object.keys(STIFFNESS);
     const i = ids.indexOf(this.game.joints.stiffnessId);
@@ -299,29 +326,36 @@ export class UI {
     w.classList.add('pop');
   }
 
+  /** Slide the category underline under the active tab. */
+  placeInk() {
+    const b = this.catBtns[this.game.tool.cat];
+    if (!b) return;
+    this.catInk.style.width = `${b.offsetWidth - 16}px`;
+    this.catInk.style.transform = `translateX(${b.offsetLeft + 8}px)`;
+    // Keep the active tab in view on narrow screens.
+    const c = this.cats;
+    if (b.offsetLeft < c.scrollLeft || b.offsetLeft + b.offsetWidth > c.scrollLeft + c.clientWidth) {
+      c.scrollTo({ left: b.offsetLeft - c.clientWidth / 2 + b.offsetWidth / 2, behavior: 'smooth' });
+    }
+  }
+
   update() {
     const game = this.game;
-    const room = ROOMS[game.roomId];
-    this.nameBtn.textContent = `🏷️ ${game.mannequin.name || 'Name me'}`;
     this.nametag.textContent = game.mannequin.name;
-    if (room) this.roomBtn.innerHTML = `${room.icon} ${room.name} ▾`;
-    const skin = SKINS[game.mannequin.skinId];
-    this.skinBtn.innerHTML = `${skin.icon} ${skin.name} ▾`;
     this.slowBtn.classList.toggle('on', game.timeScale < 1);
-    this.soundBtn.textContent = game.sfx.enabled ? '🔊' : '🔇';
-    if (game.music) this.musicBtn.classList.toggle('off', !game.music.enabled);
-    this.goreBtn.textContent = GORE_MODES[game.gore.mode].icon;
-    this.goreBtn.title = `${GORE_MODES[game.gore.mode].label} (click to change)`;
-    this.stiffBtn.title = `Joints: ${STIFFNESS[game.joints.stiffnessId].label} (click to change)`;
-    this.stiffBtn.classList.toggle('on', game.joints.stiffnessId !== 'stiff');
-    this.cat = game.tool.cat;
-    for (const [id, b] of Object.entries(this.catBtns)) b.classList.toggle('on', id === this.cat);
+    const cat = game.tool.cat;
+    for (const [id, b] of Object.entries(this.catBtns)) b.classList.toggle('on', id === cat);
     this.toolRow.innerHTML = '';
-    for (const t of game.tools.filter((x) => x.cat === this.cat)) {
-      const b = el('button', 'tool' + (t === game.tool ? ' on' : ''), `<span>${t.icon}</span><small>${t.name}</small>`);
-      b.onclick = () => game.setTool(t);
-      this.toolRow.append(b);
-    }
-    this.hint.textContent = game.tool.hint;
+    game.tools
+      .filter((x) => x.cat === cat)
+      .forEach((t, i) => {
+        const b = el('button', 'tile' + (t === game.tool ? ' on' : ''), `<span class="tile-ic">${t.icon}</span><small>${t.name}</small><kbd class="num">${i + 1}</kbd>`);
+        b.setAttribute('aria-label', t.name);
+        b.onclick = () => game.setTool(t);
+        this.toolRow.append(b);
+      });
+    this.caption.innerHTML = `<b>${game.tool.icon} ${game.tool.name}</b><span>${game.tool.hint}</span>`;
+    requestAnimationFrame(() => this.placeInk());
+    if (!this.settings.classList.contains('hidden')) this.renderSettings();
   }
 }
