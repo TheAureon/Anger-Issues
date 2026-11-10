@@ -13,6 +13,18 @@ import { Minimap } from './minimap.js';
 import { Progress, BADGES, BADGE_XP, xpForLevel, levelOf, rankOf } from './progress.js';
 
 const $ = (id) => document.getElementById(id);
+
+// --- UsForge leaderboard -------------------------------------------------------------------
+// Reports a final score to the UsForge page this game is embedded in. Does nothing when the game
+// is opened on its own. UsForge asks for the nickname and shows the board, so the game doesn't.
+function sendScoreToUsForge(score) {
+  // only when running inside UsForge's page; does nothing when the game is opened on its own
+  if (window.parent === window) return;
+  try {
+    window.parent.postMessage({ usforge: 'score', score: Math.round(score), unit: 'points' }, '*');
+  } catch (e) {}
+}
+window.sendScoreToUsForge = sendScoreToUsForge;
 const COLOR_NAME = { w: 'White', b: 'Black' };
 const FORWARD_YAW = { w: 0, b: Math.PI };
 const POV_PITCH = -0.16;
@@ -617,6 +629,9 @@ async function doShoot(a, aim, spreadMul, mine = false) {
   let kill = null;
   let victimDesc = '';
   const hitPiece = res.hit != null ? st.board[res.hit] : null;
+  if (mine && hitPiece && hitPiece.color !== shooter.color && !(hitPiece.type === 'k' && st.mode === R.CLASSIC)) {
+    enemyMaterialShot += LB_MATERIAL[hitPiece.type];
+  }
   progress.onShot({
     mine,
     shooterType: shooter.type,
@@ -791,10 +806,31 @@ function gameOver(result) {
   $('over-reason').textContent = result.reason[0].toUpperCase() + result.reason.slice(1) + '.';
   sfx.fanfare(!vsAI || won === human);
   renderSummary(progress.endGame(result));
+  reportLeaderboardScore(result);
   const tok = gameToken;
   setTimeout(() => {
     if (tok === gameToken && screen === 'game') showScreen('over');
   }, 1100);
+}
+
+// One leaderboard, one mode: Classic vs the computer on Soldier (the default difficulty), so all
+// scores are comparable. Pass & Play, MerciZero and the other difficulties are not reported.
+// Score = 10 points per point of enemy material you shot (pawn 1, knight/bishop 3, rook 5, queen 9)
+//       + 500 for a win (+10 for each of your turns under 50, so faster wins score more)
+//       + 150 for a draw.
+const LEADERBOARD = { mode: R.CLASSIC, difficulty: 'normal' };
+const LB_MATERIAL = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
+let reportedGame = -1;
+let enemyMaterialShot = 0; // counted per shot, so enemy promotions can't hide your kills
+function reportLeaderboardScore(result) {
+  if (!vsAI || st.mode !== LEADERBOARD.mode || difficulty !== LEADERBOARD.difficulty) return;
+  if (reportedGame === gameToken) return; // exactly once per game
+  reportedGame = gameToken;
+  let score = 10 * enemyMaterialShot;
+  const myTurns = human === 'w' ? Math.ceil(st.ply / 2) : Math.floor(st.ply / 2);
+  if (result.winner === human) score += 500 + 10 * Math.max(0, 50 - myTurns);
+  else if (result.winner == null) score += 150;
+  if (Number.isFinite(score)) sendScoreToUsForge(score);
 }
 
 // --- Game setup ----------------------------------------------------------------------------
@@ -810,6 +846,7 @@ function startGame() {
   renderGraves();
   last = null;
   lastDesc = '';
+  enemyMaterialShot = 0;
   pendingTurn = null;
   busy = false;
   paused = false;

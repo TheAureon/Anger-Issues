@@ -106,6 +106,21 @@ Keep, Siege Master, Regicide, Untouchable (win losing nothing), Deadeye (win wit
 Comeback Kid (win from 5+ material down), Blitz (win in 20 turns), one for beating each difficulty,
 Hot Seat, Fashionista, Collector, Veteran (10 games), Centurion (100 kills), Trigger Happy (250 shots).
 
+## UsForge leaderboard
+
+When the game runs inside UsForge's page (in an iframe), it reports one score per game to the page
+with `window.postMessage({ usforge: 'score', score, unit: 'points' }, '*')`. UsForge asks for the
+nickname and shows the top 10; the game never asks for a name. Opened on its own, nothing is sent.
+
+Only one mode counts, so scores are comparable: **Classic vs the computer on Soldier** (the default
+mode and difficulty), with either side. Pass & Play, MerciZero and the other difficulties send nothing.
+The score is sent once, when the game ends (`reportLeaderboardScore` in `src/main.js`, called from
+`gameOver`):
+
+- 10 points per point of enemy material you shoot (pawn 1, knight/bishop 3, rook 5, queen 9; promoted pieces count too)
+- +500 for a win, plus 10 for each of your turns under 50 (faster wins score more)
+- +150 for a draw
+
 ## Music
 
 The soundtrack is generated live in code (no audio files): a looping D-minor march. It's calm pads
