@@ -1,6 +1,6 @@
 // Computer opponent: expectimax search (1-3 plies by difficulty) that knows shots can miss.
 import {
-  CLASSIC, DIMS, SPREAD, VALUE, applyRaw, aimCenter, findKing, gunReaches, hitChance, inCheck,
+  CLASSIC, FOG, DIMS, SPREAD, VALUE, applyRaw, aimCenter, findKing, gunReaches, hitChance, inCheck, hiddenEnemySquares,
   legalActions, other, pseudoShots, rankOf, fileOf, toWorld,
 } from './rules.js';
 
@@ -148,10 +148,16 @@ function replyValueDeep(st, me, aim, width = 6) {
   return worst;
 }
 
+// `level` is a difficulty key or a config object shaped like DIFFICULTIES entries (campaign).
 export function chooseAction(st, level = 'normal', rng = Math.random) {
-  const cfg = DIFFICULTIES[level] || DIFFICULTIES.normal;
+  const cfg = typeof level === 'object' ? level : DIFFICULTIES[level] || DIFFICULTIES.normal;
   const me = st.turn;
-  const acts = legalActions(st);
+  let acts = legalActions(st);
+  if (st.mode === FOG) {
+    // Fog of War: the computer can only shoot at pieces it can see.
+    const hidden = hiddenEnemySquares(st, me);
+    acts = acts.filter((a) => a.kind !== 'shoot' || !hidden.has(a.to));
+  }
   if (!acts.length) return null;
   const promote = (a) => (a.promo ? { ...a, promoType: 'q' } : a);
   if (rng() < cfg.blunder) return promote(acts[Math.floor(rng() * acts.length)]);

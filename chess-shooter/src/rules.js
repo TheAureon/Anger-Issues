@@ -3,6 +3,9 @@
 
 export const CLASSIC = 'classic';
 export const MERCIZERO = 'mercizero';
+// Fog of War: MerciZero rules (kings can die, no check), but you only see what your pieces see.
+export const FOG = 'fog';
+export const isClassic = (st) => st.mode === CLASSIC;
 
 export const NAMES = { p: 'Pawn', n: 'Knight', b: 'Bishop', r: 'Rook', q: 'Queen', k: 'King' };
 export const GLYPHS = { k: '♚', q: '♛', r: '♜', b: '♝', n: '♞', p: '♟' };
@@ -74,6 +77,36 @@ export function newGame(mode = CLASSIC) {
     board[sqAt(f, 7)] = { id: id++, type: back[f], color: 'b', moved: false };
   }
   return { board, turn: 'w', mode, ply: 0, quiet: 0, nextId: id, result: null };
+}
+
+// Start from a custom position (campaign battles). `placement` is the board part of a FEN,
+// rank 8 first, e.g. '4k3/pppppppp/8/8/8/8/PPPPPPPP/4K3'. Uppercase = White.
+export function fromPlacement(placement, mode = CLASSIC) {
+  const st = newGame(mode);
+  st.board = new Array(64).fill(null);
+  let id = 1;
+  const ranks = placement.split('/');
+  if (ranks.length !== 8) throw new Error('placement needs 8 ranks');
+  ranks.forEach((row, i) => {
+    const r = 7 - i;
+    let f = 0;
+    for (const ch of row) {
+      if (/\d/.test(ch)) {
+        f += +ch;
+        continue;
+      }
+      const color = ch === ch.toUpperCase() ? 'w' : 'b';
+      const type = ch.toLowerCase();
+      const home =
+        (type === 'p' && r === (color === 'w' ? 1 : 6)) ||
+        (type === 'k' && f === 4 && r === (color === 'w' ? 0 : 7)) ||
+        (type === 'r' && (f === 0 || f === 7) && r === (color === 'w' ? 0 : 7));
+      st.board[sqAt(f, r)] = { id: id++, type, color, moved: !home };
+      f++;
+    }
+  });
+  st.nextId = id;
+  return st;
 }
 
 export function clone(st) {
@@ -262,7 +295,7 @@ const onlyKings = (st) => st.board.every((p) => !p || p.type === 'k');
 // Decide the game after an action has been applied (st.turn is the side about to play).
 export function judge(st) {
   const mover = other(st.turn);
-  if (st.mode === MERCIZERO) {
+  if (st.mode !== CLASSIC) {
     const wk = findKing(st, 'w') >= 0;
     const bk = findKing(st, 'b') >= 0;
     if (!wk || !bk) {
@@ -338,12 +371,13 @@ function rayCylinder(o, d, cx, cz, r, h) {
   return Math.max(t0, 0);
 }
 
-// Cast a ray against every piece (except `skip`). Used for bullets and for mouse picking.
-export function castRay(st, o, d, maxT = Infinity, skip = -1) {
+// Cast a ray against every piece (except `skip`, and squares in `ignore`). Used for bullets and
+// for mouse picking (picking ignores enemies hidden by fog).
+export function castRay(st, o, d, maxT = Infinity, skip = -1, ignore = null) {
   let best = { t: maxT, sq: null };
   for (let s = 0; s < 64; s++) {
     const p = st.board[s];
-    if (!p || s === skip) continue;
+    if (!p || s === skip || (ignore && ignore.has(s))) continue;
     const w = toWorld(s);
     const dm = DIMS[p.type];
     const t = rayCylinder(o, d, w.x, w.z, dm.r, dm.h);
@@ -407,4 +441,57 @@ export function hitChance(st, from, to, aim = aimCenter(st, to), samples = 240, 
   let n = 0;
   for (let i = 0; i < samples; i++) if (simulateShot(st, from, aim, rng, spreadMul).hit === to) n++;
   return n / samples;
+}
+
+// --- Fog of War ------------------------------------------------------------------------------
+
+// Squares `color` can see: around each of its pieces, everywhere it could move or shoot, and
+// along its lines up to and including the first piece in the way.
+export function visibleSquares(st, color) {
+  const vis = new Set();
+  for (let s = 0; s < 64; s++) {
+    const p = st.board[s];
+    if (!p || p.color !== color) continue;
+    const f0 = fileOf(s);
+    const r0 = rankOf(s);
+    vis.add(s);
+    for (const [df, dr] of ALL8) {
+      const t = sqAt(f0 + df, r0 + dr);
+      if (t >= 0) vis.add(t);
+    }
+    if (p.type === 'n') {
+      for (const [df, dr] of KNIGHT) {
+        const t = sqAt(f0 + df, r0 + dr);
+        if (t >= 0) vis.add(t);
+      }
+    } else if (p.type === 'p') {
+      const dir = color === 'w' ? 1 : -1;
+      for (const df of [-1, 0, 1]) for (const k of [1, 2]) {
+        const t = sqAt(f0 + df, r0 + dir * k);
+        if (t >= 0 && (df === 0 || k === 1)) vis.add(t);
+      }
+    } else if (SLIDE_DIRS[p.type]) {
+      for (const [df, dr] of SLIDE_DIRS[p.type]) {
+        for (let i = 1; i < 8; i++) {
+          const t = sqAt(f0 + df * i, r0 + dr * i);
+          if (t < 0) break;
+          vis.add(t);
+          if (st.board[t]) break;
+        }
+      }
+    }
+  }
+  return vis;
+}
+
+// Enemy-occupied squares hidden from `color` (empty set outside Fog of War).
+export function hiddenEnemySquares(st, color) {
+  const hidden = new Set();
+  if (st.mode !== FOG) return hidden;
+  const vis = visibleSquares(st, color);
+  for (let s = 0; s < 64; s++) {
+    const p = st.board[s];
+    if (p && p.color !== color && !vis.has(s)) hidden.add(s);
+  }
+  return hidden;
 }

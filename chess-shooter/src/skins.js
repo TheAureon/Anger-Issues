@@ -42,6 +42,11 @@ export const PIECE_SKINS = [
     w: { body: { c: 0xe2b33c, r: 0.28, m: 0.9 }, trim: { c: 0xfff1b0, r: 0.3, m: 0.6 } },
     b: { body: { c: 0x15121b, r: 0.12, m: 0.6 }, trim: { c: 0x9a3cff, r: 0.3, m: 0.4, e: 0x5a14b0, ei: 0.6 } },
   },
+  {
+    id: 'pieces-veteran', name: 'Veteran', price: 0, campaign: 2, desc: 'Battle-worn olive and gunmetal. Campaign reward.',
+    w: { body: { c: 0xb9b48c, r: 0.75, m: 0.1 }, trim: { c: 0xd4a640, r: 0.35, m: 0.8 } },
+    b: { body: { c: 0x3c4434, r: 0.75, m: 0.1 }, trim: { c: 0xb0b8c0, r: 0.3, m: 0.85 } },
+  },
 ];
 
 export const BOARD_SKINS = [
@@ -51,6 +56,7 @@ export const BOARD_SKINS = [
   { id: 'board-marble', name: 'Marble', price: 350, desc: 'Cold, polished stone.', light: { c: 0xeeebe4, r: 0.22 }, dark: { c: 0x5f6670, r: 0.22 }, frame: { c: 0x2b2e33, r: 0.3 } },
   { id: 'board-ice', name: 'Glacier', price: 500, desc: 'Frozen blue ice.', light: { c: 0xe2f5ff, r: 0.12, m: 0.1 }, dark: { c: 0x6ca7d6, r: 0.12, m: 0.1 }, frame: { c: 0xa6d6f2, r: 0.2 } },
   { id: 'board-candy', name: 'Sweet Shop', price: 500, desc: 'Strawberry and blueberry frosting.', light: { c: 0xffdcec, r: 0.5 }, dark: { c: 0xb2a2ff, r: 0.5 }, frame: { c: 0xff8fc3, r: 0.5 } },
+  { id: 'board-wartable', name: 'War Table', price: 0, campaign: 1, desc: 'Command-tent felt and brass. Campaign reward.', light: { c: 0x9fae7a, r: 0.95 }, dark: { c: 0x4d5e3a, r: 0.95 }, frame: { c: 0xb48a3c, r: 0.35, m: 0.8 } },
   { id: 'board-lava', name: 'Lava Field', price: 900, level: 5, desc: 'Basalt over glowing magma.', light: { c: 0x4a3f3b, r: 0.95 }, dark: { c: 0x1c1110, r: 0.85, e: 0xff3c00, ei: 0.045 }, frame: { c: 0x140b08, r: 0.9, e: 0x6a1802, ei: 0.08 } },
 ];
 
@@ -61,6 +67,7 @@ export const GUN_SKINS = [
   { id: 'guns-arctic', name: 'Arctic', price: 300, desc: 'Winter white.', metal: { c: 0xe8eef2, r: 0.4, m: 0.1 }, grip: { c: 0x9fb3c2, r: 0.6 } },
   { id: 'guns-bubblegum', name: 'Bubblegum', price: 300, desc: 'Pink. Very pink.', metal: { c: 0xff7ab8, r: 0.35, m: 0.1 }, grip: { c: 0xffd1e6, r: 0.5 } },
   { id: 'guns-plasma', name: 'Plasma', price: 700, level: 3, desc: 'Glowing energy weapons.', metal: { c: 0x10202a, r: 0.3, m: 0.4, e: 0x00d0ff, ei: 0.9 }, grip: { c: 0x203040, r: 0.5, e: 0x0060a0, ei: 0.4 } },
+  { id: 'guns-medal', name: 'Medal of Honor', price: 0, campaign: 3, desc: 'Bronze and navy blue. Campaign reward.', metal: { c: 0xb87333, r: 0.3, m: 0.9 }, grip: { c: 0x1f2f5a, r: 0.5 } },
   { id: 'guns-gold', name: 'Solid Gold', price: 1200, level: 7, desc: 'Gold-plated everything.', metal: { c: 0xe9b93e, r: 0.25, m: 0.95 }, grip: { c: 0x3b1f10, r: 0.5 } },
 ];
 

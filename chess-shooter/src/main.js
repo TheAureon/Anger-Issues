@@ -11,7 +11,8 @@ import { Fx } from './fx.js';
 import * as sfx from './audio.js';
 import { Minimap } from './minimap.js';
 import { icon, pieceIcon, hydrateIcons } from './icons.js';
-import { Progress, BADGES, BADGE_XP, xpForLevel, levelOf, rankOf } from './progress.js';
+import { Progress, BADGES, BADGE_XP, CONTRACTS, xpForLevel, levelOf, rankOf } from './progress.js';
+import { BATTLES, CHAPTERS, starGoals } from './campaign.js';
 
 const $ = (id) => document.getElementById(id);
 hydrateIcons();
@@ -89,6 +90,7 @@ const TINT = {
   cover: new THREE.Color(0xff4433),
   check: new THREE.Color(0xff0000),
   active: new THREE.Color(0x5cc8ff),
+  fog: new THREE.Color(0x15161f),
 };
 
 // --- Game state ----------------------------------------------------------------------------
@@ -106,6 +108,18 @@ const names = { w: loadPref('gunmate-name-w', 'Player 1'), b: loadPref('gunmate-
 let handoffOn = loadPref('gunmate-handoff', '1') === '1';
 let pendingTurn = null; // piece id to look through once the next player taps Ready
 let lastDesc = '';
+// Per-game opponent and campaign state.
+let battle = null; // current campaign battle, or null
+let aiLevel = 'normal'; // difficulty key or config object for chooseAction
+let aiName = 'Soldier';
+let xpLevel = 'normal'; // difficulty key used for XP and badges
+// Fog of War: whose eyes the fog follows, and what's hidden from them (refreshed every refresh()).
+let fogView = 'w';
+let fogHidden = new Set();
+let fogVisible = null; // Set of visible squares, or null when there's no fog
+const MODE_LABEL = { classic: 'Classic', mercizero: 'MerciZero', fog: 'Fog of War' };
+const MODE_LINE = { classic: 'Classic · siege the king', mercizero: 'MerciZero · kings can die', fog: 'Fog of War · shoot the king' };
+const FOG_LEVEL = 5;
 let gameToken = 0; // bumps on every new game so stale async turns stop
 const settings = {
   musicVol: +loadPref('gunmate-vol-music', '70'),
@@ -147,7 +161,7 @@ let graves = { w: [], b: [] };
 let started = false;
 
 const viewerColor = () => (vsAI ? human : st.turn);
-const playerName = (c) => (vsAI ? (c === human ? 'You' : DIFFICULTIES[difficulty].label) : names[c] || COLOR_NAME[c]);
+const playerName = (c) => (vsAI ? (c === human ? 'You' : aiName) : names[c] || COLOR_NAME[c]);
 const pieceName = (p) => R.NAMES[p.type].toLowerCase();
 const humanTurn = () => started && !paused && st && !st.result && (!vsAI || st.turn === human);
 
@@ -271,7 +285,7 @@ function pick(clientX, clientY) {
   const o = raycaster.ray.origin;
   const d = raycaster.ray.direction;
   const skip = viewMode === 'pov' ? sqOfId(povId) : -1;
-  const hit = R.castRay(st, o, d, 200, skip);
+  const hit = R.castRay(st, o, d, 200, skip, fogHidden);
   const planeT = d.y < 0 ? -o.y / d.y : Infinity;
   if (hit.sq != null && hit.t < planeT) {
     return { sq: hit.sq, point: { x: o.x + d.x * hit.t, y: o.y + d.y * hit.t, z: o.z + d.z * hit.t }, piece: true };
@@ -354,8 +368,25 @@ function renderGraves() {
 
 let current = { from: -1, moves: [], targets: [], coverage: new Set() };
 
+function updateFog() {
+  if (st && started && st.mode === R.FOG && !st.result) {
+    fogVisible = R.visibleSquares(st, fogView);
+    fogHidden = R.hiddenEnemySquares(st, fogView);
+  } else {
+    fogVisible = null;
+    fogHidden = new Set();
+  }
+  hiddenIds.clear();
+  for (const s of fogHidden) hiddenIds.add(st.board[s].id);
+}
+const hiddenIds = new Set();
+// What the current viewer can see on a square (hidden enemies read as empty).
+const seen = (sq) => (fogHidden.has(sq) ? null : st.board[sq]);
+const myTurnsSoFar = () => (human === 'w' ? Math.ceil(st.ply / 2) : Math.floor(st.ply / 2));
+
 function refresh() {
   if (!st) return;
+  updateFog();
   for (const d of diamonds) markerRoot.remove(d);
   diamonds = [];
   markerRoot.clear();
@@ -366,7 +397,7 @@ function refresh() {
   current = {
     from,
     moves: acts.filter((a) => a.kind === 'move').map((a) => a.to),
-    targets: acts.filter((a) => a.kind === 'shoot').map((a) => a.to),
+    targets: acts.filter((a) => a.kind === 'shoot' && !fogHidden.has(a.to)).map((a) => a.to),
     coverage: new Set(from >= 0 && !busy && settings.cover ? R.gunCoverage(st, from) : []),
   };
   for (const s of current.moves) {
@@ -392,16 +423,17 @@ function refresh() {
   // Check / danger.
   let checkSq = -1;
   const k = R.findKing(st, st.turn);
-  if (k >= 0 && R.attackedBy(st, k, R.other(st.turn))) checkSq = k;
+  if (!fogVisible && k >= 0 && R.attackedBy(st, k, R.other(st.turn))) checkSq = k;
 
-  // Tiles.
+  // Tiles. In fog, squares you can't see are darkened.
   const lastSet = last ? last.squares : new Set();
   for (let s = 0; s < 64; s++) {
     const t = tiles[s];
     t.material.color.copy(t.userData.baseColor);
     if (current.coverage.has(s)) t.material.color.lerp(TINT.cover, 0.22);
-    if (lastSet.has(s)) t.material.color.lerp(TINT.last, 0.4);
+    if (lastSet.has(s) && (!fogVisible || fogVisible.has(s))) t.material.color.lerp(TINT.last, 0.4);
     if (s === checkSq) t.material.color.lerp(TINT.check, 0.55);
+    if (fogVisible && !fogVisible.has(s)) t.material.color.lerp(TINT.fog, 0.62);
   }
 
   activeRing.visible = from >= 0;
@@ -415,13 +447,16 @@ function refresh() {
   $('turn-text').textContent = st.result
     ? 'Game over'
     : vsAI
-      ? `${COLOR_NAME[st.turn]} to play${st.turn !== human ? ' (computer)' : ''}`
+      ? `${COLOR_NAME[st.turn]} to play${st.turn !== human ? ` (${aiName})` : ''}`
       : `${playerName(st.turn)} (${COLOR_NAME[st.turn]}) to play`;
   $('turn-badge').innerHTML = pieceIcon('k', st.turn);
   $('turn').className = `glass turn-${st.turn}`;
-  $('mode-tag').textContent =
-    (st.mode === R.CLASSIC ? 'Classic · siege the king' : 'MerciZero · kings can die') +
-    (vsAI ? ` · vs ${DIFFICULTIES[difficulty].label}` : ' · pass & play');
+  let tag = MODE_LINE[st.mode] + (vsAI ? ` · vs ${aiName}` : ' · pass & play');
+  if (battle) {
+    tag = `Campaign · ${battle.name} · ${MODE_LABEL[st.mode]}`;
+    if (battle.turnLimit) tag += ` · ${Math.max(0, battle.turnLimit - myTurnsSoFar())} turns left`;
+  }
+  $('mode-tag').textContent = tag;
   $('mode-tag').className = st.mode;
 
   // Piece card.
@@ -456,9 +491,11 @@ function drawMap() {
     targets: current.targets,
     coverage: current.coverage,
     hover: hover.sq,
-    lastSquares: last ? last.squares : null,
-    last: last && last.line,
-    checkSq: checkK >= 0 && R.attackedBy(st, checkK, R.other(st.turn)) ? checkK : -1,
+    lastSquares: last ? (fogVisible ? new Set([...last.squares].filter((q) => fogVisible.has(q))) : last.squares) : null,
+    last: last && (!fogVisible || [...last.squares].every((q) => fogVisible.has(q))) ? last.line : null,
+    fog: fogVisible,
+    hidden: fogHidden,
+    checkSq: !fogVisible && checkK >= 0 && R.attackedBy(st, checkK, R.other(st.turn)) ? checkK : -1,
     cone: viewMode === 'pov' && current.from >= 0 ? { s: current.from, yaw, fov: (2 * Math.atan(Math.tan((camera.fov * Math.PI) / 360) * camera.aspect)) } : null,
   });
 }
@@ -475,7 +512,7 @@ function updateHover() {
     return;
   }
   const s = hover.sq;
-  const p = st.board[s];
+  const p = seen(s);
   const from = current.from;
   let text = '';
   let cls = '';
@@ -518,7 +555,7 @@ function updateHover() {
 
 function onSquare(sq, aim = null) {
   if (!st || st.result) return;
-  const p = st.board[sq];
+  const p = seen(sq);
   if (p && p.color === viewerColor()) {
     if (p.id !== povId || viewMode !== 'pov') {
       sfx.click();
@@ -534,6 +571,7 @@ function onSquare(sq, aim = null) {
   if (mv) return doMove(mv, true);
   const sh = acts.find((a) => a.kind === 'shoot' && a.to === sq);
   if (sh) return doShoot(sh, aim || R.aimCenter(st, sq), 1, true);
+  if (fogHidden.has(sq)) return status('Something is blocking that square in the fog.', 'warn');
   const why = explain(from, sq);
   if (why) status(why, 'warn');
 }
@@ -601,6 +639,7 @@ async function doMove(a, byHuman) {
   if (a.castle) desc = `${playerName(p.color)} castled ${a.castle === 'K' ? 'kingside' : 'queenside'}.`;
   else if (a.promo) desc = `${playerName(p.color)} moved a pawn to ${R.sqName(a.to)} and promoted it to a ${R.NAMES[a.promoType || 'q'].toLowerCase()}.`;
   else desc = `${playerName(p.color)} moved their ${pieceName(p)} ${R.sqName(a.from)} → ${R.sqName(a.to)}.`;
+  if (st.mode === R.FOG && !R.visibleSquares(next, R.other(p.color)).has(a.to)) desc = `${playerName(p.color)} moved a piece somewhere in the fog.`;
   commit(next, {
     squares: new Set([a.from, a.to]),
     line: { kind: 'move', a: { f: f.x + 4, r: 4 - f.z }, b: { f: to.x + 4, r: 4 - to.z } },
@@ -724,7 +763,11 @@ function commit(next, lastInfo, tok = gameToken) {
     for (const p of st.board) if (p && p.type !== 'k') diff += (p.color === human ? 1 : -1) * R.VALUE[p.type];
     progress.onMaterial(diff);
   }
-  const result = R.judge(st);
+  let result = R.judge(st);
+  // Campaign deadline: lose if you haven't won within the battle's turn limit.
+  if (!result && battle && battle.turnLimit && st.turn !== human && myTurnsSoFar() >= battle.turnLimit) {
+    result = { winner: R.other(human), reason: `out of turns: the deadline was ${battle.turnLimit} turns` };
+  }
   if (result) {
     st.result = result;
     busy = false;
@@ -740,7 +783,7 @@ function commit(next, lastInfo, tok = gameToken) {
     startTransition(0.9);
   }
   const k = R.findKing(st, st.turn);
-  if (k >= 0 && R.attackedBy(st, k, R.other(st.turn))) {
+  if (st.mode !== R.FOG && k >= 0 && R.attackedBy(st, k, R.other(st.turn))) {
     sfx.check();
     if (st.mode === R.CLASSIC) status(`Check! ${COLOR_NAME[st.turn]} king is under siege.`, 'bad');
     else status(`${COLOR_NAME[st.turn]} king is in the line of fire!`, 'bad');
@@ -753,14 +796,14 @@ async function nextTurn() {
   if (vsAI && st.turn !== human) {
     busy = true;
     refresh();
-    $('turn-text').textContent = `${DIFFICULTIES[difficulty].label} is aiming…`;
+    $('turn-text').textContent = `${aiName} is aiming…`;
     await wait(550);
     while (paused && tok === gameToken) await wait(120);
     if (tok !== gameToken) return;
-    const a = chooseAction(st, difficulty);
+    const a = chooseAction(st, aiLevel);
     if (!a) return;
     if (a.kind === 'move') await doMove(a, false);
-    else await doShoot(a, R.aimCenter(st, a.to), DIFFICULTIES[difficulty].aim);
+    else await doShoot(a, R.aimCenter(st, a.to), aiLevel.aim);
     return;
   }
   if (!vsAI) {
@@ -782,6 +825,7 @@ async function nextTurn() {
 
 function beginLocalTurn(id) {
   pendingTurn = null;
+  fogView = st.turn; // the fog now follows the player holding the device
   viewMode = 'pov';
   busy = false;
   povId = null;
@@ -802,7 +846,7 @@ function showHandoff(opening = false) {
       ? `Last turn: ${lastDesc}`
       : '';
   const k = R.findKing(st, c);
-  const threatened = k >= 0 && R.attackedBy(st, k, R.other(c));
+  const threatened = st.mode !== R.FOG && k >= 0 && R.attackedBy(st, k, R.other(c));
   $('ho-alert').classList.toggle('hidden', !threatened);
   $('ho-alert').textContent = st.mode === R.CLASSIC ? '⚠ Your king is in check!' : '⚠ Your king is in the line of fire!';
   $('btn-ready').textContent = `I'm ${playerName(c)}, start my turn`;
@@ -822,11 +866,14 @@ function gameOver(result) {
   const won = result.winner;
   let title = won ? `${COLOR_NAME[won]} wins` : 'Draw';
   if (!vsAI && won) title = `${playerName(won)} wins!`;
-  if (vsAI && won) title = won === human ? 'You win!' : 'The computer wins';
+  if (vsAI && won) title = won === human ? 'You win!' : `${aiName} wins`;
+  if (battle) title = won === human ? 'Mission complete!' : 'Mission failed';
   $('over-title').textContent = title;
   $('over-reason').textContent = result.reason[0].toUpperCase() + result.reason.slice(1) + '.';
   sfx.fanfare(!vsAI || won === human);
-  renderSummary(progress.endGame(result));
+  const sum = progress.endGame(result);
+  renderSummary(sum);
+  renderBattleResult(sum && sum.campaignResult);
   reportLeaderboardScore(result);
   const tok = gameToken;
   setTimeout(() => {
@@ -844,7 +891,7 @@ const LB_MATERIAL = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
 let reportedGame = -1;
 let enemyMaterialShot = 0; // counted per shot, so enemy promotions can't hide your kills
 function reportLeaderboardScore(result) {
-  if (!vsAI || st.mode !== LEADERBOARD.mode || difficulty !== LEADERBOARD.difficulty) return;
+  if (!vsAI || battle || st.mode !== LEADERBOARD.mode || xpLevel !== LEADERBOARD.difficulty) return;
   if (reportedGame === gameToken) return; // exactly once per game
   reportedGame = gameToken;
   let score = 10 * enemyMaterialShot;
@@ -856,13 +903,33 @@ function reportLeaderboardScore(result) {
 
 // --- Game setup ----------------------------------------------------------------------------
 
-function startGame() {
+// Start a game. With a campaign battle `b`, its position, rules and opponent are used instead of
+// the setup screen's choices.
+function startGame(b = null) {
   sfx.unlock();
   gameToken++;
   tweens.length = 0;
-  st = R.newGame(chosenMode);
-  vsAI = chosenOpp === 'ai';
-  human = vsAI ? (chosenSide === 'r' ? (Math.random() < 0.5 ? 'w' : 'b') : chosenSide) : 'w';
+  battle = b;
+  if (b) {
+    st = R.fromPlacement(b.placement, b.mode);
+    vsAI = true;
+    human = 'w';
+    const base = typeof b.ai === 'object' ? b.ai.base : b.ai;
+    xpLevel = base;
+    aiLevel = { ...DIFFICULTIES[base], ...(typeof b.ai === 'object' && b.ai.aim ? { aim: b.ai.aim } : {}) };
+    aiName = b.foe;
+  } else {
+    if (chosenMode === R.FOG && progress.level < FOG_LEVEL) chosenMode = R.CLASSIC;
+    st = R.newGame(chosenMode);
+    vsAI = chosenOpp === 'ai';
+    human = vsAI ? (chosenSide === 'r' ? (Math.random() < 0.5 ? 'w' : 'b') : chosenSide) : 'w';
+    xpLevel = difficulty;
+    aiLevel = { ...DIFFICULTIES[difficulty] };
+    aiName = DIFFICULTIES[difficulty].label;
+  }
+  fogView = vsAI ? human : 'w';
+  scene.fog.near = st.mode === R.FOG ? 7 : 18;
+  scene.fog.far = st.mode === R.FOG ? 26 : 55;
   graves = { w: [], b: [] };
   renderGraves();
   last = null;
@@ -877,17 +944,17 @@ function startGame() {
   povId = null;
   viewMode = 'pov';
   started = true;
-  progress.beginGame({ vsAI, human, difficulty, mode: chosenMode });
+  progress.beginGame({ vsAI, human, difficulty: xpLevel, mode: st.mode, campaign: b });
   showScreen('game');
   setPov(remembered[viewerColor()]);
-  const modeLine = chosenMode === R.CLASSIC ? 'Classic: siege the king' : 'MerciZero: shoot the king';
+  const modeLine = { classic: 'Classic: siege the king', mercizero: 'MerciZero: shoot the king', fog: 'Fog of War: find the king' }[st.mode];
   if (!vsAI && handoffOn) {
     // Start with the device in White's hands.
     pendingTurn = remembered.w;
     showHandoff(true);
     return;
   }
-  banner(vsAI && human === 'b' ? 'You play Black' : modeLine, 1600);
+  banner(b ? b.name : vsAI && human === 'b' ? 'You play Black' : modeLine, 1600);
   if (vsAI && human === 'b') nextTurn();
 }
 
@@ -977,7 +1044,7 @@ window.addEventListener('keydown', (e) => {
   if (screen === 'title') return leaveTitle();
   if (k === 'escape') {
     // Close the topmost panel first.
-    for (const id of ['promo', 'help', 'settings', 'badges']) {
+    for (const id of ['promo', 'help', 'settings', 'briefing', 'campaign', 'badges']) {
       if (id === 'badges' && !$('shop').classList.contains('hidden')) return closeShop();
       if (id !== 'promo' && !$(id).classList.contains('hidden')) return closeOverlay(id);
     }
@@ -1021,8 +1088,9 @@ function showScreen(name) {
   paused = name !== 'game' && name !== 'over';
   $('btn-continue').classList.toggle('hidden', !(started && st && !st.result));
   if (name === 'pause') {
-    const who = vsAI ? `vs ${DIFFICULTIES[difficulty].label}, you play ${COLOR_NAME[human]}` : `${names.w} (White) vs ${names.b} (Black)`;
-    $('pause-info').textContent = `${st.mode === R.CLASSIC ? 'Classic' : 'MerciZero'} · ${who} · turn ${Math.floor(st.ply / 2) + 1}`;
+    const who = vsAI ? `vs ${aiName}, you play ${COLOR_NAME[human]}` : `${names.w} (White) vs ${names.b} (Black)`;
+    $('pause-info').textContent = `${battle ? `Campaign: ${battle.name} · ` : ''}${MODE_LABEL[st.mode]} · ${who} · turn ${Math.floor(st.ply / 2) + 1}`;
+    renderContracts($('pause-contracts'), true);
   }
   if (name === 'main-menu') renderProfile();
   updateMood();
@@ -1048,6 +1116,12 @@ function openSetup(opp) {
   $('local-options').classList.toggle('hidden', opp === 'ai');
   fillNames();
   $('opt-handoff').checked = handoffOn;
+  const fogLocked = progress.level < FOG_LEVEL;
+  document.querySelector('[data-mode=fog]').classList.toggle('locked', fogLocked);
+  $('fog-desc').textContent = fogLocked
+    ? `Unlocks at level ${FOG_LEVEL} (${rankOf(FOG_LEVEL)}). You're level ${progress.level}.`
+    : 'MerciZero rules, but you only see what your pieces can see.';
+  if (fogLocked && chosenMode === R.FOG) chosenMode = R.CLASSIC;
   selectIn('mode-choices', 'mode', chosenMode);
   selectIn('diff-choices', 'diff', difficulty);
   selectIn('side-choices', 'side', chosenSide);
@@ -1096,6 +1170,12 @@ for (const [id, attr, set] of [
   $(id).addEventListener('click', (e) => {
     const b = e.target.closest('.choice');
     if (!b) return;
+    if (b.classList.contains('locked')) {
+      b.classList.remove('shake');
+      void b.offsetWidth;
+      b.classList.add('shake');
+      return;
+    }
     sfx.click();
     set(b.dataset[attr]);
     selectIn(id, attr, b.dataset[attr]);
@@ -1117,10 +1197,10 @@ $('btn-vs-local').addEventListener('click', () => openSetup('local'));
 $('btn-howto').addEventListener('click', () => $('help').classList.remove('hidden'));
 $('btn-settings').addEventListener('click', () => $('settings').classList.remove('hidden'));
 $('btn-to-title').addEventListener('click', () => showScreen('title'));
-$('btn-start').addEventListener('click', startGame);
+$('btn-start').addEventListener('click', () => startGame());
 $('btn-setup-back').addEventListener('click', () => showScreen('main-menu'));
 $('btn-resume').addEventListener('click', resumeGame);
-$('btn-restart').addEventListener('click', startGame);
+$('btn-restart').addEventListener('click', () => startGame(battle));
 $('btn-pause-howto').addEventListener('click', () => $('help').classList.remove('hidden'));
 $('btn-pause-settings').addEventListener('click', () => $('settings').classList.remove('hidden'));
 $('btn-quit').addEventListener('click', () => showScreen('main-menu'));
@@ -1182,6 +1262,7 @@ $('btn-sound').addEventListener('click', () => {
 });
 $('btn-again').addEventListener('click', () => {
   if (!vsAI) swapNames(); // fair rematch: the other player gets White
+  if (battle) return startGame(battle);
   startGame();
 });
 $('btn-over-menu').addEventListener('click', () => showScreen('main-menu'));
@@ -1220,6 +1301,8 @@ window.addEventListener('resize', () => {
 const progress = new Progress((e) => {
   if (e.type === 'xp') xpPop(e.amount, e.label);
   else if (e.type === 'badge') toast(`<span class="t-icon">${e.badge.icon}</span><div><small>Badge unlocked · +${BADGE_XP} XP</small><b>${e.badge.name}</b><span>${e.badge.desc}</span></div>`, 'badge');
+  else if (e.type === 'contract') toast(`<span class="t-icon">📋</span><div><small>Contract complete · +${e.contract.xp} XP</small><b>${e.contract.text}</b><span>Daily contract</span></div>`, 'badge');
+  else if (e.type === 'reward') toast(`<span class="t-icon">🎁</span><div><small>Chapter ${e.chapter.id} complete</small><b>${e.skin.name} unlocked</b><span>Exclusive skin, equip it in the Shop.</span></div>`, 'level');
   else if (e.type === 'level') {
     toast(`<span class="t-icon lvl">${e.level}</span><div><small>Level up!</small><b>${e.rank}</b><span>You reached level ${e.level}.</span></div>`, 'level');
     sfx.fanfare(true);
@@ -1268,6 +1351,8 @@ function renderProfile() {
   $('pf-badges').innerHTML = `${icon('medal')}${unlocked}/${BADGES.length}`;
   $('badge-count').textContent = `${unlocked} of ${BADGES.length} unlocked`;
   $('shop-menu-sub').textContent = `${progress.balance} XP to spend on skins`;
+  $('campaign-sub').textContent = `12 battles · ${progress.campaignStars}/36 stars`;
+  renderContractsPanel();
 }
 
 function renderBadges() {
@@ -1476,6 +1561,126 @@ $('btn-shop').addEventListener('click', openShop);
 $('btn-shop-close').addEventListener('click', closeShop);
 applyEquipped();
 
+
+// --- Daily contracts --------------------------------------------------------------------------
+
+function untilMidnight() {
+  const now = new Date();
+  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  const m = Math.max(0, Math.round((end - now) / 60000));
+  return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`;
+}
+function renderContracts(el, compact = false) {
+  const d = progress.daily();
+  const rows = d.ids
+    .map((id) => {
+      const c = CONTRACTS.find((x) => x.id === id);
+      const n = Math.min(c.goal, d.progress[id] || 0);
+      const done = !!d.done[id];
+      return `<div class="ct ${done ? 'done' : ''}">
+        <div class="ct-check">${done ? '✓' : ''}</div>
+        <div class="ct-body"><span>${c.text}</span>${c.goal > 1 && !done ? `<div class="mini"><div style="width:${(n / c.goal) * 100}%"></div></div>` : ''}</div>
+        <div class="ct-xp">${done ? 'Done' : c.goal > 1 ? `${n}/${c.goal}` : ''}<b>+${c.xp}</b></div>
+      </div>`;
+    })
+    .join('');
+  el.innerHTML = compact ? `<div class="row-label">Today's contracts</div>${rows}` : rows;
+}
+function renderContractsPanel() {
+  renderContracts($('ct-list'));
+  $('ct-reset').textContent = `New in ${untilMidnight()}`;
+  $('ct-first').innerHTML = progress.firstWinAvailable
+    ? `${icon('star')}<span><b>First win of the day</b> pays double XP</span>`
+    : `${icon('star')}<span>First-win bonus claimed. Back tomorrow.</span>`;
+  $('ct-first').classList.toggle('claimed', !progress.firstWinAvailable);
+}
+
+// --- Campaign -------------------------------------------------------------------------------
+
+const starStr = (n) => '★'.repeat(n) + '☆'.repeat(3 - n);
+let briefBattle = null;
+
+function renderCampaign() {
+  const c = progress.p.campaign;
+  $('cp-stars').textContent = progress.campaignStars;
+  $('cp-chapters').innerHTML = CHAPTERS.map((ch) => {
+    const open = progress.chapterUnlocked(ch);
+    const list = BATTLES.filter((b) => b.chapter === ch.id);
+    const got = list.reduce((a, b) => a + (c.stars[b.id] || 0), 0);
+    const rewardOwned = !!progress.p.owned[ch.reward.id];
+    const cards = list
+      .map((b) => {
+        const unlocked = progress.battleUnlocked(b);
+        const n = c.stars[b.id] || 0;
+        return `<button class="battle ${unlocked ? '' : 'locked'} ${c.won[b.id] ? 'won' : ''}" data-battle="${b.id}" ${unlocked ? '' : 'disabled'}>
+          <span class="b-num">${BATTLES.indexOf(b) + 1}</span>
+          <b>${b.name}</b>
+          <span class="b-foe">${b.foe} · ${MODE_LABEL[b.mode]}</span>
+          <span class="b-stars">${unlocked ? starStr(n) : icon('lock') + ' Locked'}</span>
+        </button>`;
+      })
+      .join('');
+    return `<section class="chapter ${open ? '' : 'locked'}">
+      <div class="ch-head">
+        <div><div class="ch-num">Chapter ${ch.id}</div><b>${ch.name}</b><span>${ch.blurb}</span></div>
+        <div class="ch-side">${open ? `<span class="ch-stars">★ ${got}/12</span>` : `<span class="ch-lock">${icon('lock')} Needs ${ch.need} ★</span>`}
+          <span class="ch-reward ${rewardOwned ? 'got' : ''}">🎁 ${rewardOwned ? 'Reward claimed' : 'Exclusive skin'}</span></div>
+      </div>
+      <div class="battles">${cards}</div>
+    </section>`;
+  }).join('');
+}
+function openCampaign() {
+  sfx.click();
+  renderCampaign();
+  $('campaign').classList.remove('hidden');
+}
+function openBriefing(b) {
+  briefBattle = b;
+  const best = progress.p.campaign.stars[b.id] || 0;
+  const got = progress.p.campaign;
+  $('br-num').textContent = `Chapter ${b.chapter} · Battle ${BATTLES.indexOf(b) + 1}`;
+  $('br-name').textContent = b.name;
+  $('br-foe').textContent = `Opponent: ${b.foe}`;
+  const base = typeof b.ai === 'object' ? b.ai.base : b.ai;
+  const tags = [MODE_LABEL[b.mode], `${DIFFICULTIES[base].label} AI`];
+  if (typeof b.ai === 'object' && b.ai.aim) tags.push('Sharpshooter');
+  if (b.turnLimit) tags.push(`${b.turnLimit}-turn deadline`);
+  $('br-tags').innerHTML = tags.map((t) => `<span class="tag">${t}</span>`).join('');
+  $('br-blurb').textContent = b.blurb;
+  $('br-goals').innerHTML = starGoals(b).map((g, i) => `<li class="${i < best ? 'got' : ''}"><span>${i < best ? '★' : '☆'}</span>${g}</li>`).join('');
+  $('btn-br-play').lastChild.textContent = got.won[b.id] ? 'Replay' : 'Deploy';
+  $('briefing').classList.remove('hidden');
+}
+function renderBattleResult(res) {
+  $('ov-campaign').classList.toggle('hidden', !res);
+  const next = battle ? BATTLES[BATTLES.indexOf(battle) + 1] : null;
+  $('btn-next-battle').classList.toggle('hidden', !(res && res.stars[0] && next && progress.battleUnlocked(next)));
+  if (!res) return;
+  $('ov-stars').innerHTML = res.stars.map((g, i) => `<span class="${g ? 'got' : ''}" style="animation-delay:${0.3 + i * 0.25}s">★</span>`).join('');
+  $('ov-goals').innerHTML = starGoals(battle).map((g, i) => `<li class="${res.stars[i] ? 'got' : ''}"><span>${res.stars[i] ? '★' : '☆'}</span>${g}</li>`).join('');
+  $('ov-reward').innerHTML = res.reward ? `🎁 Chapter complete! <b>${res.reward.name}</b> skin unlocked.` : res.newStars ? `+${res.newStars} new star${res.newStars > 1 ? 's' : ''}` : '';
+}
+
+$('btn-campaign').addEventListener('click', openCampaign);
+$('btn-campaign-close').addEventListener('click', () => closeOverlay('campaign'));
+$('cp-chapters').addEventListener('click', (e) => {
+  const el = e.target.closest('[data-battle]');
+  if (!el || el.disabled) return;
+  sfx.click();
+  openBriefing(BATTLES.find((b) => b.id === el.dataset.battle));
+});
+$('btn-br-back').addEventListener('click', () => closeOverlay('briefing'));
+$('btn-br-play').addEventListener('click', () => {
+  closeOverlay('briefing');
+  closeOverlay('campaign');
+  startGame(briefBattle);
+});
+$('btn-next-battle').addEventListener('click', () => {
+  const next = BATTLES[BATTLES.indexOf(battle) + 1];
+  if (next) openBriefing(next);
+});
+
 // --- Main loop -----------------------------------------------------------------------------
 
 const clock = new THREE.Clock();
@@ -1521,7 +1726,7 @@ function frame() {
     camera.position.copy(_pos);
     camera.quaternion.copy(_quat);
   }
-  for (const [id, g] of groups) g.visible = !(viewMode === 'pov' && id === povId && blend > 0.55);
+  for (const [id, g] of groups) g.visible = !(viewMode === 'pov' && id === povId && blend > 0.55) && !hiddenIds.has(id);
 
   // Markers.
   for (const d of diamonds) {
@@ -1558,7 +1763,7 @@ function frame() {
 }
 
 // Read-only hook for automated play-testing.
-window.__gunmate = { state: () => st, legal: () => (st ? R.legalActions(st) : []), busy: () => busy, music: sfx.music, progress: () => progress, tile: (i) => { const m = tiles[i].material; return { c: m.color.getHexString(), e: m.emissive.getHexString(), ei: m.emissiveIntensity, r: m.roughness }; }, cam: () => ({ pos: camera.position.toArray().map((v) => +v.toFixed(2)), povId, viewMode, yaw: +yaw.toFixed(2), pitch: +pitch.toFixed(2) }) };
+window.__gunmate = { state: () => st, legal: () => (st ? R.legalActions(st) : []), busy: () => busy, music: sfx.music, progress: () => progress, fog: () => ({ hidden: [...fogHidden], hiddenGroups: [...groups.values()].filter((g) => !g.visible).length }), tile: (i) => { const m = tiles[i].material; return { c: m.color.getHexString(), e: m.emissive.getHexString(), ei: m.emissiveIntensity, r: m.roughness }; }, cam: () => ({ pos: camera.position.toArray().map((v) => +v.toFixed(2)), povId, viewMode, yaw: +yaw.toFixed(2), pitch: +pitch.toFixed(2) }) };
 
 // Show the board (slowly orbiting) behind the menu.
 st = R.newGame(R.CLASSIC);

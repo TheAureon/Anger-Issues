@@ -71,6 +71,10 @@ export class Minimap {
         g.lineWidth = 2;
         g.strokeRect(x + 1, y - cell + 1, cell - 2, cell - 2);
       }
+      if (d.fog && !d.fog.has(s)) {
+        g.fillStyle = 'rgba(14,15,24,0.72)';
+        g.fillRect(x, y - cell, cell, cell);
+      }
       if (s === d.checkSq) {
         const grd = g.createRadialGradient(x + cell / 2, y - cell / 2, 2, x + cell / 2, y - cell / 2, cell * 0.7);
         grd.addColorStop(0, 'rgba(255,0,0,0.85)');
@@ -124,7 +128,7 @@ export class Minimap {
     g.font = `${Math.floor(cell * 0.82)}px "Segoe UI Symbol","Noto Sans Symbols 2","DejaVu Sans",serif`;
     for (let s = 0; s < 64; s++) {
       const p = d.board[s];
-      if (!p) continue;
+      if (!p || (d.hidden && d.hidden.has(s))) continue;
       const [x, y] = sqXY(s);
       const glyph = GLYPHS[p.type] + '︎';
       g.lineWidth = 2.5;

@@ -84,6 +84,7 @@
           </div>
         </button>
         <button class="menu-btn hidden" id="btn-continue" data-icon="play"><b>Continue</b><span>Back to your game</span></button>
+        <button class="menu-btn" id="btn-campaign" data-icon="flag"><b>Campaign</b><span id="campaign-sub">12 battles · 0/36 stars</span></button>
         <button class="menu-btn" id="btn-vs-ai" data-icon="target"><b>Play vs Computer</b><span>Four difficulty levels</span></button>
         <button class="menu-btn" id="btn-vs-local" data-icon="users"><b>Pass &amp; Play</b><span>Play a friend on this device, no internet needed</span></button>
         <button class="menu-btn" id="btn-shop" data-icon="bag"><b>Shop</b><span id="shop-menu-sub">Spend XP on skins</span></button>
@@ -92,6 +93,11 @@
         <button class="menu-btn" id="btn-settings" data-icon="gear"><b>Settings</b><span>Music, sound, camera</span></button>
         <button class="menu-btn small" id="btn-to-title" data-icon="back">Back to title</button>
       </div>
+      <aside id="contracts" class="glass">
+        <div class="ct-head"><b>Daily contracts</b><span id="ct-reset"></span></div>
+        <div id="ct-list"></div>
+        <div id="ct-first" class="ct-first"></div>
+      </aside>
     </div>
 
     <!-- New game setup -->
@@ -107,6 +113,10 @@
           <button class="choice" data-mode="mercizero">
             <b>MerciZero</b>
             <span>Kings can die. Shoot the enemy king to win. No check rules.</span>
+          </button>
+          <button class="choice" data-mode="fog">
+            <b>Fog of War</b>
+            <span id="fog-desc">MerciZero rules, but you only see what your pieces can see.</span>
           </button>
         </div>
         <div id="ai-options">
@@ -144,6 +154,33 @@
         <div class="ho-alert hidden" id="ho-alert"></div>
         <button class="primary" id="btn-ready">Start my turn</button>
         <button class="menu-btn small" id="btn-ho-pause">Pause</button>
+      </div>
+    </div>
+
+    <!-- Campaign map -->
+    <div id="campaign" class="overlay hidden">
+      <div class="panel wide">
+        <div class="shop-head">
+          <h2>Campaign</h2>
+          <div class="wallet" data-icon="star"><b id="cp-stars">0</b>/36</div>
+        </div>
+        <p class="sub small-print">Win battles to unlock the next one. Earn stars to open new chapters. Finish a chapter for an exclusive skin.</p>
+        <div id="cp-chapters"></div>
+        <button class="primary" id="btn-campaign-close" data-icon="back">Back</button>
+      </div>
+    </div>
+
+    <!-- Battle briefing -->
+    <div id="briefing" class="overlay hidden">
+      <div class="panel small">
+        <div class="brief-num" id="br-num"></div>
+        <h2 id="br-name"></h2>
+        <div class="brief-foe" id="br-foe"></div>
+        <div class="brief-tags" id="br-tags"></div>
+        <p class="brief-blurb" id="br-blurb"></p>
+        <ul class="star-goals" id="br-goals"></ul>
+        <button class="primary" id="btn-br-play" data-icon="play">Deploy</button>
+        <button class="secondary" id="btn-br-back" data-icon="back">Back</button>
       </div>
     </div>
 
@@ -198,6 +235,7 @@
       <div class="panel small">
         <h2>Paused</h2>
         <p id="pause-info" class="sub"></p>
+        <div id="pause-contracts"></div>
         <button class="primary" id="btn-resume" data-icon="play">Resume</button>
         <button class="secondary" id="btn-restart" data-icon="restart">Restart</button>
         <button class="secondary" id="btn-pause-howto" data-icon="book">How to play</button>
@@ -247,12 +285,18 @@
       <div class="panel small">
         <h2 id="over-title"></h2>
         <p id="over-reason"></p>
+        <div id="ov-campaign" class="hidden">
+          <div class="ov-stars" id="ov-stars"></div>
+          <ul class="star-goals" id="ov-goals"></ul>
+          <div id="ov-reward"></div>
+        </div>
         <div id="over-xp">
           <div class="over-level"><span class="lvl" id="ov-level">1</span><div class="pf-main"><div class="pf-rank" id="ov-rank"></div><div class="xpbar"><div id="ov-bar"></div></div></div></div>
           <ul id="ov-lines"></ul>
           <div id="ov-total"></div>
           <div id="ov-badges"></div>
         </div>
+        <button class="primary hidden" id="btn-next-battle" data-icon="flag">Next battle</button>
         <button class="primary" id="btn-again" data-icon="restart">Play again</button>
         <button class="secondary" id="btn-over-menu" data-icon="home">Main menu</button>
         <button class="secondary" id="btn-over-look" data-icon="eye">Look at the board</button>

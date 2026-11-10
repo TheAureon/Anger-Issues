@@ -97,3 +97,57 @@ for (const mode of [R.CLASSIC, R.MERCIZERO]) {
   ok(!pr.buy(camo) && pr.p.spent === 350, 'cannot buy twice');
   ok(pr.equip('pieces', camo) && pr.p.equipped.pieces === 'pieces-camo' && !pr.equip('pieces', neon), 'equip only owned skins');
 }
+
+// Progression: campaign, contracts, fog
+{
+  const P = await import('../chess-shooter/src/progress.js');
+  const C = await import('../chess-shooter/src/campaign.js');
+  const { chooseAction } = await import('../chess-shooter/src/ai.js');
+  // Custom positions
+  for (const b of C.BATTLES) {
+    const g = R.fromPlacement(b.placement, b.mode);
+    if (R.findKing(g, 'w') < 0 || R.findKing(g, 'b') < 0 || R.legalActions(g).length === 0) ok(false, `battle ${b.id} position is playable`);
+  }
+  ok(true, `all ${C.BATTLES.length} campaign positions have both kings and legal moves`);
+  const pawns = R.fromPlacement('4k3/pppppppp/8/8/8/8/PPPPPPPP/4K3', R.MERCIZERO);
+  ok(R.pseudoMoves(pawns, at('e2')).some((m) => m.double) && pawns.board[at('e1')].moved === false, 'placement keeps start-square flags (double pawn step, castling rights)');
+  // Fog visibility
+  const fog = R.newGame(R.FOG);
+  const hid = R.hiddenEnemySquares(fog, 'w');
+  ok(hid.size === 16, `fog hides all 16 black pieces at the start (hidden ${hid.size})`);
+  ok(!R.visibleSquares(fog, 'w').has(at('e5')) && R.visibleSquares(fog, 'w').has(at('e4')), 'white sees e4 but not e5 at the start');
+  const fogClassic = R.hiddenEnemySquares(R.newGame(R.CLASSIC), 'w');
+  ok(fogClassic.size === 0, 'no fog outside Fog of War');
+  const g2 = R.newGame(R.FOG); g2.board[at('e3')] = { id: 90, type: 'p', color: 'b', moved: true }; g2.turn = 'b';
+  const fogAct = chooseAction(g2, 'normal');
+  ok(fogAct && (fogAct.kind !== 'shoot' || !R.hiddenEnemySquares(g2, 'b').has(fogAct.to)), 'fog AI only shoots what it can see');
+  ok(R.judge({ ...R.newGame(R.FOG), board: R.newGame(R.FOG).board.map((p) => (p && p.type === 'k' && p.color === 'b' ? null : p)) }).winner === 'w', 'fog: shooting the king wins (MerciZero rules)');
+
+  // Contracts + first win + campaign
+  const pr = new P.Progress(() => {});
+  const d = pr.daily();
+  ok(d.ids.length === 3 && new Set(d.ids).size === 3, 'three distinct daily contracts: ' + d.ids.join(', '));
+  const first = C.BATTLES[0], second = C.BATTLES[1], ch2 = C.BATTLES.find((b) => b.chapter === 2);
+  ok(pr.battleUnlocked(first) && !pr.battleUnlocked(second) && !pr.battleUnlocked(ch2), 'only battle 1 is open at first');
+  pr.beginGame({ vsAI: true, human: 'w', difficulty: 'easy', mode: R.CLASSIC, campaign: first });
+  const xp0 = pr.p.xp;
+  for (let i = 0; i < 6; i++) pr.onShot({ mine: true, shooterType: 'p', intended: 1, victim: { type: 'p', color: 'b' }, victimSq: 1, distance: 3, chance: 0.4 });
+  pr.onMove({ mine: true, castle: true, promo: true });
+  pr.game.myTurns = 20; pr.game.lost = 1;
+  const sum = pr.endGame({ winner: 'w', reason: 'checkmate: the king is besieged' });
+  const lines = sum.xp.map((l) => l.label);
+  ok(lines.includes('First win of the day (×2)') && !pr.firstWinAvailable, 'first win of the day pays double, once');
+  ok(sum.campaignResult.stars.every(Boolean) && pr.p.campaign.stars[first.id] === 3 && lines.some((l) => l.startsWith('Campaign star')), '3 stars recorded and paid: ' + JSON.stringify(sum.campaignResult.stars));
+  ok(pr.battleUnlocked(second), 'winning battle 1 unlocks battle 2');
+  const doneCount = Object.keys(pr.p.daily.done).length;
+  ok(doneCount >= 1, `contracts progressed (${doneCount} done: ${Object.keys(pr.p.daily.done).join(', ')}), XP gained ${pr.p.xp - xp0}`);
+  // Second win today: no double
+  pr.beginGame({ vsAI: true, human: 'w', difficulty: 'easy', mode: R.CLASSIC });
+  ok(!pr.endGame({ winner: 'w', reason: 'checkmate: the king is besieged' }).xp.some((l) => l.label.startsWith('First win')), 'no second first-win bonus the same day');
+  // Chapter reward
+  for (const b of C.BATTLES.filter((x) => x.chapter === 1)) pr.recordBattle(b, { won: true, myTurns: 99, lost: 99 });
+  const wt = (await import('../chess-shooter/src/skins.js')).BOARD_SKINS.find((s) => s.id === 'board-wartable');
+  ok(pr.owns(wt) && pr.p.badges['chapter-1'], 'finishing chapter 1 grants the War Table board and Graduate badge');
+  ok(!new P.Progress(() => {}).owns(wt) && /Campaign reward/.test(new P.Progress(() => {}).canBuy(wt).why), 'campaign skins are not free or buyable');
+  ok(pr.chapterUnlocked(C.CHAPTERS[1]) === pr.campaignStars >= 6, `chapter 2 gate follows stars (${pr.campaignStars} stars)`);
+}
