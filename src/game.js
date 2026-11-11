@@ -364,6 +364,7 @@ export class Game {
   onPointerDown(e) {
     this.sfx.unlock();
     if (e.target.closest && e.target.closest('.ui')) return;
+    if (this.ui?.wardrobeOpen) return; // dressing up: drags just orbit the camera
     if (e.button !== 0 && e.pointerType === 'mouse') return; // right/middle = camera
     if (this.activePointer != null) return;
     const p = this.makePointer(e);

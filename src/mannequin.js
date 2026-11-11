@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { RAPIER, toLocal, toWorld, bodyPos } from './physics.js';
 import { mat, mesh, geo } from './materials.js';
+import { HATS, FACES, OUTFITS, HEAD_SIZES } from './accessories.js';
 
 /* ------------------------------------------------------------------ */
 /* Body layout (metres, standing on y = 0, facing +z)                  */
@@ -229,6 +230,122 @@ export class Mannequin {
     }
     this.name = name ?? 'Dummy';
     this.steps = 0;
+    this.look = this.loadLook();
+    this.skinId = this.look.skin;
+  }
+
+  /* ------------------------------ customisation ------------------------------ */
+
+  static defaultLook() {
+    return { skin: 'wood', paint: { body: 0xd9a066, joint: 0x8a5a2b, eyes: 0x5b3a1c }, hat: 'none', face: 'none', outfit: 'none', head: 'normal' };
+  }
+
+  loadLook() {
+    const def = Mannequin.defaultLook();
+    let saved = null;
+    try {
+      saved = JSON.parse(localStorage.getItem('ai-look') || 'null');
+    } catch {
+      saved = null;
+    }
+    if (!saved || typeof saved !== 'object') return def;
+    const pick = (v, table, fallback) => (typeof v === 'string' && table[v] ? v : fallback);
+    const num = (v, fallback) => (Number.isInteger(v) && v >= 0 && v <= 0xffffff ? v : fallback);
+    return {
+      skin: saved.skin === 'custom' || SKINS[saved.skin] ? saved.skin : def.skin,
+      paint: {
+        body: num(saved.paint?.body, def.paint.body),
+        joint: num(saved.paint?.joint, def.paint.joint),
+        eyes: num(saved.paint?.eyes, def.paint.eyes),
+      },
+      hat: pick(saved.hat, HATS, 'none'),
+      face: pick(saved.face, FACES, 'none'),
+      outfit: pick(saved.outfit, OUTFITS, 'none'),
+      head: pick(saved.head, HEAD_SIZES, 'normal'),
+    };
+  }
+
+  saveLook() {
+    try {
+      localStorage.setItem('ai-look', JSON.stringify(this.look));
+    } catch {
+      /* storage unavailable */
+    }
+  }
+
+  /** The "Custom paint" skin, built from the chosen colours. */
+  customSkin() {
+    const p = this.look.paint;
+    const hex = (c) => c & 0xffffff;
+    const darker = new THREE.Color(hex(p.body)).multiplyScalar(0.75).getHex();
+    return {
+      name: 'Custom paint',
+      icon: '🎨',
+      body: () => mat(hex(p.body), { roughness: 0.6 }),
+      joint: mat(hex(p.joint), { roughness: 0.6 }),
+      face: mat(hex(p.eyes)),
+      sclera: mat(0xfaf6ee),
+      chips: [hex(p.body), hex(p.joint), darker],
+    };
+  }
+
+  /**
+   * Change part of the look. Head size needs a rebuilt body (it's physics), the
+   * rest applies live.
+   */
+  setLook(patch) {
+    const before = this.look.head;
+    this.look = { ...this.look, ...patch, paint: { ...this.look.paint, ...(patch.paint || {}) } };
+    this.saveLook();
+    if (patch.skin || patch.paint) this.setSkin(this.look.skin);
+    if (this.look.head !== before) {
+      this.reset();
+      return;
+    }
+    if ('hat' in patch || 'face' in patch || 'outfit' in patch) this.dress();
+  }
+
+  randomLook() {
+    const keys = (t) => Object.keys(t);
+    const any = (a) => a[(Math.random() * a.length) | 0];
+    const PALETTE = [0xd9a066, 0xf2c12e, 0xe8213a, 0xff7a3d, 0xff9ccd, 0xc77dff, 0x2a8cff, 0x4dd6e0, 0x3fd06a, 0xf4efe8, 0x3a3a44];
+    const custom = Math.random() < 0.4;
+    this.setLook({
+      skin: custom ? 'custom' : any(keys(SKINS)),
+      paint: custom ? { body: any(PALETTE), joint: any(PALETTE), eyes: any([0x111111, 0x2a8cff, 0x3fd06a, 0xe8213a]) } : {},
+      hat: Math.random() < 0.75 ? any(keys(HATS).filter((k) => k !== 'none')) : 'none',
+      face: Math.random() < 0.5 ? any(keys(FACES).filter((k) => k !== 'none')) : 'none',
+      outfit: Math.random() < 0.6 ? any(keys(OUTFITS).filter((k) => k !== 'none')) : 'none',
+      head: Math.random() < 0.6 ? 'normal' : any(keys(HEAD_SIZES)),
+    });
+  }
+
+  /** (Re)attach hat, face and outfit accessories to the current body parts. */
+  dress() {
+    const by = this.byName;
+    if (!by) return;
+    for (const e of this.parts) {
+      if (!e.mesh) continue;
+      for (const c of [...e.mesh.children]) if (c.userData.accessory) e.mesh.remove(c);
+    }
+    const put = (table, id, defaultPart) => {
+      const item = table[id];
+      if (!item?.build) return;
+      const target = by[item.part || defaultPart];
+      if (!target?.alive) return;
+      const g = item.build();
+      g.userData.accessory = id;
+      g.traverse((o) => {
+        if (o.isMesh) o.castShadow = true;
+      });
+      target.mesh.add(g);
+    };
+    put(HATS, this.look.hat, 'head');
+    put(FACES, this.look.face, 'head');
+    put(OUTFITS, this.look.outfit, 'chest');
+    // Bits that animate (the propeller beanie).
+    this.spinners = [];
+    for (const e of this.parts) e.mesh?.traverse((o) => o.userData.spin && this.spinners.push(o));
   }
 
   setName(name) {
@@ -242,7 +359,7 @@ export class Mannequin {
   }
 
   get skin() {
-    return SKINS[this.skinId];
+    return this.skinId === 'custom' ? this.customSkin() : SKINS[this.skinId] || SKINS.wood;
   }
 
   build() {
@@ -250,8 +367,11 @@ export class Mannequin {
     const skin = this.skin;
     const byName = {};
     let i = 0;
-    for (const [name, def] of Object.entries(P)) {
+    const headScale = HEAD_SIZES[this.look.head]?.scale || 1;
+    for (const [name, base] of Object.entries(P)) {
       const idx = i++;
+      // Head size is real: a bigger ball collider, heavier, sitting higher on the same neck.
+      const def = name === 'head' && headScale !== 1 ? { ...base, r: base.r * headScale, pos: [0, 1.575 + 0.135 * headScale, 0], mass: base.mass * headScale * headScale } : base;
       const bd = RAPIER.RigidBodyDesc.dynamic()
         .setTranslation(...def.pos)
         .setLinearDamping(0.05)
@@ -267,10 +387,11 @@ export class Mannequin {
       const e = physics.create({
         body: bd,
         colliders: [cd],
-        mesh: makePartMesh(name, def, skin, idx),
+        mesh: makePartMesh(name, base, skin, idx),
         kind: 'part',
         data: { partName: name, sockets: [], skinIndex: idx },
       });
+      if (name === 'head' && headScale !== 1) e.mesh.scale.setScalar(headScale);
       byName[name] = e;
       this.parts.push(e);
     }
@@ -289,6 +410,7 @@ export class Mannequin {
       });
     }
     this.byName = byName;
+    this.dress();
     this.game.life?.onBuild();
     this.game.progress?.startRun();
   }
@@ -307,6 +429,10 @@ export class Mannequin {
 
   setSkin(id) {
     this.skinId = id;
+    if (this.look && this.look.skin !== id) {
+      this.look.skin = id;
+      this.saveLook();
+    }
     const skin = this.skin;
     for (const e of this.parts) {
       e.mesh.traverse((o) => {

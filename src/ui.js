@@ -3,6 +3,7 @@ import { ROOMS } from './rooms.js';
 import { SKINS } from './mannequin.js';
 import { STIFFNESS } from './joints.js';
 import { GORE_MODES } from './gore.js';
+import { HATS, FACES, OUTFITS, HEAD_SIZES, PAINT } from './accessories.js';
 
 const NAMES = ['Gerald', 'Woody', 'Splinter', 'Kevin', 'Sir Oakley', 'Plank', 'Pinecone', 'Barry', 'Timber', 'Clive', 'Norbert', 'Knot', 'Dougie', 'Mr. Hinges', 'Twiggy', 'Steve'];
 
@@ -41,6 +42,7 @@ export class UI {
     action('↺', 'New mannequin', 'X', () => game.resetMannequin());
     action('🧹', 'Clear props & machines', 'C', () => game.clearProps());
     this.slowBtn = action('🐢', 'Slow motion', 'T', () => game.toggleSlowmo());
+    this.wardrobeBtn = action('👕', 'Customize mannequin', '', () => this.toggleWardrobe());
     this.settingsBtn = action('⚙️', 'Settings', '', () => this.toggleSettings(), 'primary');
     top.append(left, right);
     root.append(top);
@@ -60,7 +62,7 @@ export class UI {
               <input id="ai-name-input" class="name-input" maxlength="20" autocomplete="off" spellcheck="false" placeholder="Give it a name" aria-label="Mannequin name" />
               <button type="button" class="soft-btn dice" title="Random name" aria-label="Random name">🎲</button>
             </div>
-            <div class="chips skins"></div>
+            <button class="soft-btn wide open-wardrobe">👕 Customize look, hats &amp; outfits</button>
           </section>
           <section>
             <h3>Room</h3>
@@ -115,6 +117,10 @@ export class UI {
       game.sfx.unlock();
       game.sfx.setEnabled(e.target.checked);
     };
+    S.querySelector('.open-wardrobe').onclick = () => {
+      this.toggleSettings(false);
+      this.toggleWardrobe(true);
+    };
     S.querySelector('.open-profile').onclick = () => {
       this.toggleSettings(false);
       game.progress?.openPanel();
@@ -122,6 +128,44 @@ export class UI {
     S.querySelector('.open-help').onclick = () => {
       this.toggleSettings(false);
       this.toggleHelp(true);
+    };
+
+    /* ------------------------------ wardrobe ------------------------------ */
+    this.wardrobe = el('div', 'wardrobe-wrap hidden');
+    this.wardrobe.innerHTML = `
+      <aside class="sheet wardrobe" role="dialog" aria-label="Customize mannequin">
+        <header class="sheet-head">
+          <h2>Wardrobe</h2>
+          <button class="hud-btn sheet-close" aria-label="Close wardrobe"><span class="ic">✕</span></button>
+        </header>
+        <div class="sheet-body">
+          <section><h3>Look</h3><div class="chips w-skins"></div></section>
+          <section class="w-paint-sec"><h3>Paint</h3><div class="w-paint"></div></section>
+          <section><h3>Head size</h3><div class="seg w-head"></div></section>
+          <section><h3>Hat</h3><div class="w-grid w-hat"></div></section>
+          <section><h3>Face</h3><div class="w-grid w-face"></div></section>
+          <section><h3>Outfit</h3><div class="w-grid w-outfit"></div></section>
+        </div>
+        <footer class="sheet-foot">
+          <button class="soft-btn w-random">🎲 Randomize</button>
+          <button class="soft-btn w-default">↺ Default</button>
+          <button class="cta w-done">Done</button>
+        </footer>
+      </aside>`;
+    root.append(this.wardrobe);
+    const W = this.wardrobe;
+    W.querySelector('.sheet-close').onclick = () => this.toggleWardrobe(false);
+    W.querySelector('.w-done').onclick = () => this.toggleWardrobe(false);
+    W.querySelector('.w-random').onclick = () => {
+      game.sfx.whoosh();
+      game.mannequin.randomLook();
+      this.renderWardrobe();
+    };
+    W.querySelector('.w-default').onclick = () => {
+      game.sfx.click();
+      const d = game.mannequin.constructor.defaultLook();
+      game.mannequin.setLook(d);
+      this.renderWardrobe();
     };
 
     /* ------------------------------ in-world ------------------------------ */
@@ -209,6 +253,7 @@ export class UI {
         this.toggleSettings(false);
         this.toggleHelp(false);
         game.progress?.panel?.classList.add('hidden');
+        if (this.wardrobeOpen) this.toggleWardrobe(false);
       }
       if (/^[1-9]$/.test(e.key) && !e.ctrlKey && !e.metaKey && !e.altKey) {
         const t = game.tools.filter((x) => x.cat === game.tool.cat)[Number(e.key) - 1];
@@ -245,7 +290,6 @@ export class UI {
         box.append(b);
       }
     };
-    opts(S.querySelector('.skins'), SKINS, game.mannequin.skinId, (id) => game.mannequin.setSkin(id), 'chip');
     opts(S.querySelector('.rooms-grid'), ROOMS, game.roomId, (id) => game.setRoom(id), 'room-card');
     const gore = Object.fromEntries(Object.entries(GORE_MODES).map(([id, m]) => [id, { icon: m.icon, name: id === 'off' ? 'Off' : id === 'ketchup' ? 'Cartoon' : m.label.replace(/ gore$/, '') }]));
     opts(S.querySelector('.gore'), gore, game.gore.mode, (id) => game.gore.setMode(id), 'seg-btn');
@@ -253,6 +297,78 @@ export class UI {
     opts(S.querySelector('.joints'), joints, game.joints.stiffnessId, (id) => game.joints.setStiffness(id), 'seg-btn');
     S.querySelector('.sw.music').checked = !!game.music?.enabled;
     S.querySelector('.sw.sound').checked = game.sfx.enabled;
+  }
+
+  /* ------------------------------ wardrobe ------------------------------ */
+
+  toggleWardrobe(force) {
+    const show = force ?? this.wardrobe.classList.contains('hidden');
+    this.wardrobeOpen = show;
+    this.wardrobe.classList.toggle('hidden', !show);
+    this.wardrobeBtn.classList.toggle('on', show);
+    this.dock.classList.toggle('dimmed', show);
+    if (show) {
+      this.toggleSettings(false);
+      if (this.game.activeTool) this.game.endGesture(null, true);
+      this.renderWardrobe();
+      this.frameT = 0; // start the close-up camera move
+    }
+  }
+
+  renderWardrobe() {
+    const game = this.game;
+    const m = game.mannequin;
+    const look = m.look;
+    const W = this.wardrobe;
+    const cards = (box, table, current, pick, cls) => {
+      box.innerHTML = '';
+      for (const [id, d] of Object.entries(table)) {
+        const b = el('button', `${cls}${id === current ? ' on' : ''}`, `<span class="ic">${d.icon}</span><span>${esc(d.name)}</span>`);
+        b.onclick = () => {
+          game.sfx.click();
+          pick(id);
+          this.renderWardrobe();
+        };
+        box.append(b);
+      }
+    };
+    const skins = { ...SKINS, custom: { name: 'Custom paint', icon: '🎨' } };
+    cards(W.querySelector('.w-skins'), skins, m.skinId, (id) => m.setLook({ skin: id }), 'chip');
+    cards(W.querySelector('.w-head'), HEAD_SIZES, look.head, (id) => m.setLook({ head: id }), 'seg-btn');
+    cards(W.querySelector('.w-hat'), HATS, look.hat, (id) => m.setLook({ hat: id }), 'room-card');
+    cards(W.querySelector('.w-face'), FACES, look.face, (id) => m.setLook({ face: id }), 'room-card');
+    cards(W.querySelector('.w-outfit'), OUTFITS, look.outfit, (id) => m.setLook({ outfit: id }), 'room-card');
+    // Paint rows: picking any colour switches to the custom paint skin.
+    const paint = W.querySelector('.w-paint');
+    paint.innerHTML = '';
+    const hex = (c) => '#' + c.toString(16).padStart(6, '0');
+    for (const [key, label] of [['body', 'Body'], ['joint', 'Joints'], ['eyes', 'Eyes']]) {
+      const row = el('div', 'paint-row', `<span class="paint-label">${label}</span>`);
+      const sw = el('div', 'swatches');
+      for (const c of PAINT) {
+        const b = el('button', 'swatch' + (m.skinId === 'custom' && look.paint[key] === c ? ' on' : ''));
+        b.style.background = hex(c);
+        b.setAttribute('aria-label', `${label} ${hex(c)}`);
+        b.onclick = () => {
+          game.sfx.click();
+          m.setLook({ skin: 'custom', paint: { [key]: c } });
+          this.renderWardrobe();
+        };
+        sw.append(b);
+      }
+      const pick = el('input', 'swatch-pick');
+      pick.type = 'color';
+      pick.value = hex(look.paint[key]);
+      pick.title = 'Any colour';
+      pick.oninput = () => {
+        m.setLook({ skin: 'custom', paint: { [key]: parseInt(pick.value.slice(1), 16) } });
+      };
+      pick.onchange = () => this.renderWardrobe();
+      sw.append(pick);
+      row.append(sw);
+      paint.append(row);
+    }
+    W.querySelector('.w-paint-sec').classList.toggle('dim', m.skinId !== 'custom');
   }
 
   openNamer() {
@@ -264,8 +380,26 @@ export class UI {
   /* ------------------------------ per frame ------------------------------ */
 
   /** Keep the name tag over the head. */
-  tick() {
+  tick(dt = 0.016) {
     const game = this.game;
+    // Wardrobe: glide the camera into a close-up of the mannequin, framed beside the panel.
+    if (this.wardrobeOpen && this.frameT < 1) {
+      const chest = game.mannequin.byName?.chest;
+      if (chest?.alive) {
+        this.frameT = Math.min(1, this.frameT + dt / 0.9);
+        const t = chest.body.translation();
+        const cam = game.camera;
+        const wide = game.container.clientWidth > 700;
+        const toCam = cam.position.clone().sub(game.controls.target).setY(0).normalize();
+        if (toCam.lengthSq() < 0.5) toCam.set(0, 0, 1);
+        const right = new game.camera.position.constructor(toCam.z, 0, -toCam.x);
+        const look = new game.camera.position.constructor(t.x, wide ? 1.15 : 0.95, t.z).addScaledVector(right, wide ? 0.45 : 0);
+        const want = look.clone().addScaledVector(toCam, wide ? 2.5 : 3.2).setY(wide ? 1.45 : 1.35);
+        const k = Math.min(1, dt * 5);
+        game.controls.target.lerp(look, k);
+        cam.position.lerp(want, k);
+      }
+    }
     const head = game.mannequin.byName?.head;
     const tag = this.nametag;
     if (!head?.alive || !game.mannequin.name) {

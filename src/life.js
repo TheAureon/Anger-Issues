@@ -340,8 +340,8 @@ export class Life {
     const pos = bodyPos(b.C.body).setY(0);
     // Remember where danger came from for a few seconds after it stops moving.
     const th = this.threat || (this.memory && now < this.memory.until && this.fear > 0.35 ? { kind: 'memory', pos: this.memory.pos, urgency: this.fear } : null);
-    if (game.title?.active) {
-      // Centre stage on the title screen: stand still, look at the camera.
+    if (game.title?.active || game.ui?.wardrobeOpen) {
+      // Centre stage on the title screen (or posing for the wardrobe): stand still, look at the camera.
       this.mode = 'idle';
       this.target = pos.clone();
       this.targetAt = now + 1;
@@ -556,7 +556,7 @@ export class Life {
       this.lookTarget.copy(game.camera.position);
       return;
     }
-    if (game.title?.active) {
+    if (game.title?.active || game.ui?.wardrobeOpen) {
       // Staring into the camera, with the odd nervous glance to the side.
       if (now > this.glanceAt) {
         this.glance = Math.random() < 0.7 ? 'player' : new THREE.Vector3((Math.random() - 0.5) * 6, 1.4, 1 + Math.random());
@@ -759,6 +759,7 @@ export class Life {
 
   update(dt) {
     const game = this.game;
+    for (const o of game.mannequin.spinners || []) o.rotation.y += dt * o.userData.spin;
     const head = this.head;
     const chest = game.mannequin.byName?.chest;
     if (chest?.alive && !chest.flat) {

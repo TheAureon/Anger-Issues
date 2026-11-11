@@ -108,6 +108,17 @@ holds the name, look, room, gore, joints, music and sound, plus links to your ba
 card. Tools sit in a dock at the bottom: category tabs, big tiles for the tools in that category,
 and the selected tool's tip above them. Number keys pick a tool within the current category.
 
+**Customize it (👕 Wardrobe):** open it from the 👕 button in the top bar or from Settings. While it's
+open the mannequin stops, poses, and the camera moves in for a close-up. You can change:
+- the look: any skin, or a **custom paint** with your own body, joint and eye colours;
+- the head size (Small, Normal, Big, Huge), which also changes its physics;
+- a hat: top hat, cap, party hat, crown, hard hat, cowboy, viking, propeller beanie (it spins), chef;
+- the face: glasses, shades, mustache, clown nose, eye patch, monocle;
+- the outfit: bow tie, necktie, cape, scarf, tutu, backpack.
+
+🎲 Randomize and ↺ Default are at the bottom. Accessories ride on their body part, so a severed head
+keeps its hat. The look is saved between visits.
+
 **Name it:** in ⚙️ Settings (or click the floating name tag above its head), with a 🎲 for random
 suggestions. The name stays over its head, even when that head is
 rolling around on its own, and it's remembered next time you play.
@@ -166,6 +177,7 @@ src/
   joints.js        all joints: break-by-stretch, pose-holding muscles, fixed "stick" joints
   mannequin.js     body layout, skins, sever / damage / reattach logic
   gore.js          optional cartoon gore: droplets, stump fountains, caps, splat decals
+  accessories.js   wardrobe items (hats, face, outfits), head sizes, paint palette
   life.js          its brain: balance, walking, getting up, crawling, fear behaviour, eyes
   rooms.js         rooms and their hazards
   fx.js            instanced particles, flashes, camera shake, 2D overlay trails

@@ -1949,3 +1949,151 @@ kbd {
     opacity: 0;
   }
 }
+
+/* ---------- Wardrobe ---------- */
+.wardrobe-wrap {
+  position: absolute;
+  inset: 0;
+  z-index: 12;
+  pointer-events: none;
+}
+
+.wardrobe-wrap .sheet {
+  pointer-events: auto;
+}
+
+.sheet-foot {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px 16px;
+  border-top: 1px solid var(--edge);
+}
+
+.sheet-foot .soft-btn {
+  flex: 0 0 auto;
+}
+
+.sheet-foot .cta {
+  flex: 1;
+  padding: 10px;
+  font-size: 16px !important;
+}
+
+.w-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(78px, 1fr));
+  gap: 6px;
+}
+
+.w-grid .room-card {
+  padding: 9px 4px 8px;
+  font-size: 11px !important;
+}
+
+.w-grid .room-card .ic {
+  font-size: 22px;
+}
+
+.w-paint-sec.dim .swatches {
+  opacity: 0.55;
+}
+
+.paint-row {
+  display: grid;
+  grid-template-columns: 54px 1fr;
+  align-items: center;
+  gap: 8px;
+}
+
+.paint-label {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--muted);
+}
+
+.swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  border: 2px solid rgba(255, 255, 255, 0.12) !important;
+  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.25);
+  transition: transform 0.1s;
+  padding: 0;
+}
+
+.swatch:hover {
+  transform: scale(1.12);
+}
+
+.swatch.on {
+  border-color: #fff !important;
+  box-shadow: 0 0 0 2px var(--hot);
+}
+
+.swatch-pick {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 2px dashed rgba(255, 255, 255, 0.4);
+  border-radius: 7px;
+  background: conic-gradient(red, yellow, lime, cyan, blue, magenta, red);
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.swatch-pick::-webkit-color-swatch-wrapper {
+  padding: 0;
+  opacity: 0;
+}
+
+.swatch-pick::-moz-color-swatch {
+  opacity: 0;
+}
+
+.dock {
+  transition: opacity 0.3s;
+}
+
+.dock.dimmed {
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (max-width: 640px) {
+  .wardrobe-wrap .sheet {
+    max-height: 58%;
+  }
+  .sheet-foot {
+    padding-bottom: calc(12px + var(--safe-b));
+  }
+}
+
+/* Narrow phones: five top-bar buttons + the level chip must fit on one row. */
+@media (max-width: 430px) {
+  .hud-slot .lvl-text {
+    display: none !important;
+  }
+  .hud-slot .lvl-chip {
+    gap: 6px;
+    padding: 0 10px 0 4px !important;
+  }
+  .hud-slot .lvl-badges {
+    padding-left: 6px;
+  }
+  .hud-right {
+    gap: 5px;
+  }
+  .hud-btn {
+    width: 38px;
+    height: 38px;
+  }
+  .hud-btn .ic {
+    font-size: 17px;
+  }
+}
