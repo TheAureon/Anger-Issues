@@ -112,9 +112,13 @@ and the selected tool's tip above them. Number keys pick a tool within the curre
 open the mannequin stops, poses, and the camera moves in for a close-up. You can change:
 - the look: any skin, or a **custom paint** with your own body, joint and eye colours;
 - the head size (Small, Normal, Big, Huge), which also changes its physics;
-- a hat: top hat, cap, party hat, crown, hard hat, cowboy, viking, propeller beanie (it spins), chef;
+- a hat (23): top hat, cap, party hat, crown, hard hat, cowboy, viking, propeller beanie (it spins),
+  chef, beanie, wizard, witch, Santa, pirate, halo, bunny ears, sombrero, beret, grad cap, traffic
+  cone, fez, headphones, astronaut helmet;
 - the face: glasses, shades, mustache, clown nose, eye patch, monocle;
-- the outfit: bow tie, necktie, cape, scarf, tutu, backpack.
+- the outfit (17): bow tie, necktie, cape, scarf, tutu, backpack, tuxedo, life vest, sash, angel
+  wings and devil wings (they flap, faster when it's scared), jetpack (flickering flames), grass
+  skirt, armor, barrel, flower lei, medal.
 
 🎲 Randomize and ↺ Default are at the bottom. Accessories ride on their body part, so a severed head
 keeps its hat. The look is saved between visits.

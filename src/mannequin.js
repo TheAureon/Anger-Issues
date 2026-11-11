@@ -343,9 +343,17 @@ export class Mannequin {
     put(HATS, this.look.hat, 'head');
     put(FACES, this.look.face, 'head');
     put(OUTFITS, this.look.outfit, 'chest');
-    // Bits that animate (the propeller beanie).
+    // Bits that animate: spinning (propeller, halo), flapping (wings), flickering (jetpack flames).
     this.spinners = [];
-    for (const e of this.parts) e.mesh?.traverse((o) => o.userData.spin && this.spinners.push(o));
+    this.flappers = [];
+    this.flickers = [];
+    for (const e of this.parts) {
+      e.mesh?.traverse((o) => {
+        if (o.userData.spin) this.spinners.push(o);
+        if (o.userData.flap) this.flappers.push(o);
+        if (o.userData.flicker) this.flickers.push(o);
+      });
+    }
   }
 
   setName(name) {

@@ -759,7 +759,14 @@ export class Life {
 
   update(dt) {
     const game = this.game;
-    for (const o of game.mannequin.spinners || []) o.rotation.y += dt * o.userData.spin;
+    const m = game.mannequin;
+    for (const o of m.spinners || []) o.rotation.y += dt * o.userData.spin;
+    const now = performance.now() / 1000;
+    for (const o of m.flappers || []) {
+      const f = o.userData.flap;
+      o.rotation.y = f.base + Math.sin(now * f.speed * (1 + this.fear * 1.5)) * f.amp; // flap faster when scared
+    }
+    for (const o of m.flickers || []) o.scale.set(1, 0.7 + Math.random() * 0.6, 1);
     const head = this.head;
     const chest = game.mannequin.byName?.chest;
     if (chest?.alive && !chest.flat) {
