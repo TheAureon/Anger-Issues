@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { RAPIER, toLocal, toWorld, bodyPos } from './physics.js';
 import { mat, mesh, geo } from './materials.js';
 import { HATS, FACES, OUTFITS, HEAD_SIZES } from './accessories.js';
+import { HEAD_SHAPES, EYES, NOSES, EARS, HAIR, BEARDS, BUILDS, FEET, buildScale } from './shapes.js';
 
 /* ------------------------------------------------------------------ */
 /* Body layout (metres, standing on y = 0, facing +z)                  */
@@ -151,6 +152,7 @@ function makePartMesh(name, def, skin, index) {
   const g = new THREE.Group();
   const body = mesh(partGeometry(name, def), skin.body(index));
   body.userData.role = 'body';
+  body.userData.main = true; // the piece's main shape (reshaped by the wardrobe)
   g.add(body);
   // Joint balls on the child side, like a real artist's mannequin.
   for (const [, , child, w, , r] of J) {
@@ -172,6 +174,7 @@ function makePartMesh(name, def, skin, index) {
       m.userData.facePart = name;
       m.position.set(...pos);
       m.userData.base = m.position.clone();
+      m.userData.base0 = m.position.clone();
       g.add(m);
       return m;
     };
@@ -181,6 +184,7 @@ function makePartMesh(name, def, skin, index) {
     }
     const nose = mesh(geo('nose', () => new THREE.ConeGeometry(0.018, 0.05, 4).rotateX(Math.PI / 2)), skin.body(index));
     nose.userData.role = 'body';
+    nose.userData.nose = true;
     nose.position.set(0, -0.012, 0.12);
     g.add(nose);
   }
@@ -237,7 +241,23 @@ export class Mannequin {
   /* ------------------------------ customisation ------------------------------ */
 
   static defaultLook() {
-    return { skin: 'wood', paint: { body: 0xd9a066, joint: 0x8a5a2b, eyes: 0x5b3a1c }, hat: 'none', face: 'none', outfit: 'none', head: 'normal' };
+    return {
+      skin: 'wood',
+      paint: { body: 0xd9a066, joint: 0x8a5a2b, eyes: 0x5b3a1c },
+      hat: 'none',
+      face: 'none',
+      outfit: 'none',
+      head: 'normal',
+      headShape: 'round',
+      eyes: 'classic',
+      nose: 'pointy',
+      ears: 'none',
+      hair: 'none',
+      beard: 'none',
+      hairColor: 0x2b1d14,
+      build: 'normal',
+      feet: 'normal',
+    };
   }
 
   loadLook() {
@@ -262,6 +282,15 @@ export class Mannequin {
       face: pick(saved.face, FACES, 'none'),
       outfit: pick(saved.outfit, OUTFITS, 'none'),
       head: pick(saved.head, HEAD_SIZES, 'normal'),
+      headShape: pick(saved.headShape, HEAD_SHAPES, 'round'),
+      eyes: pick(saved.eyes, EYES, 'classic'),
+      nose: pick(saved.nose, NOSES, 'pointy'),
+      ears: pick(saved.ears, EARS, 'none'),
+      hair: pick(saved.hair, HAIR, 'none'),
+      beard: pick(saved.beard, BEARDS, 'none'),
+      hairColor: num(saved.hairColor, def.hairColor),
+      build: pick(saved.build, BUILDS, 'normal'),
+      feet: pick(saved.feet, FEET, 'normal'),
     };
   }
 
@@ -302,7 +331,8 @@ export class Mannequin {
       this.reset();
       return;
     }
-    if ('hat' in patch || 'face' in patch || 'outfit' in patch) this.dress();
+    this.reshape();
+    this.dress();
   }
 
   randomLook() {
@@ -317,7 +347,96 @@ export class Mannequin {
       face: Math.random() < 0.5 ? any(keys(FACES).filter((k) => k !== 'none')) : 'none',
       outfit: Math.random() < 0.6 ? any(keys(OUTFITS).filter((k) => k !== 'none')) : 'none',
       head: Math.random() < 0.6 ? 'normal' : any(keys(HEAD_SIZES)),
+      headShape: Math.random() < 0.5 ? 'round' : any(keys(HEAD_SHAPES)),
+      eyes: Math.random() < 0.5 ? 'classic' : any(keys(EYES)),
+      nose: any(keys(NOSES)),
+      ears: Math.random() < 0.5 ? 'none' : any(keys(EARS)),
+      hair: Math.random() < 0.3 ? 'none' : any(keys(HAIR)),
+      beard: Math.random() < 0.6 ? 'none' : any(keys(BEARDS)),
+      hairColor: any([0x2b1d14, 0x5a3a22, 0xe8c27a, 0xc2552a, 0x9a9a9a, 0xf2f2f2, 0x2a8cff, 0xff6fb5, 0x3fd06a, 0x8b5cf6]),
+      build: Math.random() < 0.4 ? 'normal' : any(keys(BUILDS)),
+      feet: Math.random() < 0.7 ? 'normal' : any(keys(FEET)),
     });
+  }
+
+  /** Apply head shape, eyes, nose, ears, build and feet to the current body. */
+  reshape() {
+    const by = this.byName;
+    if (!by) return;
+    const look = this.look;
+    const mainOf = (e) => e?.mesh?.children.find((c) => c.userData.main);
+    // Body build and feet.
+    for (const e of this.parts) {
+      const main = mainOf(e);
+      if (!main || e.partName === 'head') continue;
+      let sc = buildScale(look.build, e.partName) || [1, 1, 1];
+      if (/^foot/.test(e.partName)) sc = FEET[look.feet]?.scale || sc;
+      if (!e.flat) main.scale.set(...sc);
+    }
+    const head = by.head;
+    if (!head?.alive) return;
+    const hs = HEAD_SHAPES[look.headShape] || HEAD_SHAPES.round;
+    const main = mainOf(head);
+    if (main) main.geometry = hs.geo();
+    const dz = hs.front - 0.115;
+    const spread = hs.side / 0.108;
+    for (const c of [...head.mesh.children]) if (c.userData.shapePart) head.mesh.remove(c);
+    // Eyes: swap shapes and sit them on this head's face.
+    const style = EYES[look.eyes] || EYES.classic;
+    const parts = {};
+    head.mesh.traverse((o) => o.userData.facePart && (parts[o.userData.facePart] = o));
+    for (const s of ['L', 'R']) {
+      const eye = parts['eye' + s];
+      const pupil = parts['pupil' + s];
+      if (!eye || !pupil) continue;
+      const sign = s === 'L' ? 1 : -1;
+      const hide = style.cyclops && s === 'R';
+      const x = style.cyclops ? 0 : sign * 0.046 * spread * (style.spread || 1);
+      const y = 0.024 + (style.y || 0);
+      eye.visible = !hide && !!style.sclera;
+      if (style.sclera) eye.geometry = style.sclera();
+      eye.position.set(x, y, 0.101 + dz);
+      eye.userData.base = eye.position.clone();
+      pupil.visible = !hide;
+      pupil.geometry = style.pupil();
+      pupil.position.set(x, y, (style.sclera ? 0.11 : 0.104) + dz);
+      pupil.userData.base = pupil.position.clone();
+      if (style.lids && !hide) {
+        const lid = mesh(new THREE.BoxGeometry(0.062, 0.03, 0.012), this.skin.body(head.skinIndex), { cast: false });
+        lid.userData.role = 'body';
+        lid.userData.shapePart = true;
+        lid.position.set(x, y + 0.015, 0.113 + dz);
+        head.mesh.add(lid);
+      }
+    }
+    // Nose.
+    const nose = head.mesh.children.find((c) => c.userData.nose);
+    const ns = NOSES[look.nose] || NOSES.pointy;
+    if (nose) {
+      nose.visible = !!ns.geo;
+      if (ns.geo) nose.geometry = ns.geo();
+      nose.position.set(0, -0.012, 0.12 + dz + (ns.z || 0));
+    }
+    // Ears (skin coloured, so they follow skins and tints).
+    const es = EARS[look.ears];
+    if (es?.geo) {
+      for (const sgn of [-1, 1]) {
+        const ear = mesh(es.geo(), this.skin.body(head.skinIndex));
+        ear.userData.role = 'body';
+        ear.userData.shapePart = true;
+        if (es.elf) {
+          ear.position.set(sgn * (hs.side + 0.008), 0.04, -0.01);
+          ear.rotation.z = -sgn * 1.0;
+        } else if (es.big) {
+          ear.position.set(sgn * (hs.side + 0.012), 0.01, -0.005);
+          ear.scale.set(0.4, 1, 0.9);
+        } else {
+          ear.position.set(sgn * (hs.side + 0.004), 0.01, 0);
+          ear.scale.set(0.45, 1, 0.8);
+        }
+        head.mesh.add(ear);
+      }
+    }
   }
 
   /** (Re)attach hat, face and outfit accessories to the current body parts. */
@@ -328,20 +447,41 @@ export class Mannequin {
       if (!e.mesh) continue;
       for (const c of [...e.mesh.children]) if (c.userData.accessory) e.mesh.remove(c);
     }
-    const put = (table, id, defaultPart) => {
+    const hs = HEAD_SHAPES[this.look.headShape] || HEAD_SHAPES.round;
+    const hairMat = mat(this.look.hairColor & 0xffffff, { roughness: 0.9 });
+    // Fit to the head shape / body build so items sit on the surface.
+    const fit = (g, partName, lift) => {
+      if (partName === 'head') {
+        g.scale.set(hs.side / 0.108, 1, hs.front / 0.115);
+        if (lift) g.position.y += hs.top - 0.13;
+      } else {
+        const sc = buildScale(this.look.build, partName);
+        if (sc) g.scale.set(sc[0], 1, sc[2]);
+      }
+    };
+    const put = (table, id, defaultPart, lift = true) => {
       const item = table[id];
       if (!item?.build) return;
-      const target = by[item.part || defaultPart];
+      const partName = item.part || defaultPart;
+      const target = by[partName];
       if (!target?.alive) return;
-      const g = item.build();
+      let g = item.build(hairMat);
+      if (Array.isArray(g)) {
+        const grp = new THREE.Group();
+        grp.add(...g);
+        g = grp;
+      }
+      fit(g, partName, lift);
       g.userData.accessory = id;
       g.traverse((o) => {
         if (o.isMesh) o.castShadow = true;
       });
       target.mesh.add(g);
     };
+    put(HAIR, this.look.hair, 'head');
+    put(BEARDS, this.look.beard, 'head', false);
     put(HATS, this.look.hat, 'head');
-    put(FACES, this.look.face, 'head');
+    put(FACES, this.look.face, 'head', false);
     put(OUTFITS, this.look.outfit, 'chest');
     // Bits that animate: spinning (propeller, halo), flapping (wings), flickering (jetpack flames).
     this.spinners = [];
@@ -418,6 +558,7 @@ export class Mannequin {
       });
     }
     this.byName = byName;
+    this.reshape();
     this.dress();
     this.game.life?.onBuild();
     this.game.progress?.startRun();

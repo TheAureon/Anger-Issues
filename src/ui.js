@@ -4,6 +4,7 @@ import { SKINS } from './mannequin.js';
 import { STIFFNESS } from './joints.js';
 import { GORE_MODES } from './gore.js';
 import { HATS, FACES, OUTFITS, HEAD_SIZES, PAINT } from './accessories.js';
+import { HEAD_SHAPES, EYES, NOSES, EARS, HAIR, BEARDS, HAIR_COLORS, BUILDS, FEET } from './shapes.js';
 
 const NAMES = ['Gerald', 'Woody', 'Splinter', 'Kevin', 'Sir Oakley', 'Plank', 'Pinecone', 'Barry', 'Timber', 'Clive', 'Norbert', 'Knot', 'Dougie', 'Mr. Hinges', 'Twiggy', 'Steve'];
 
@@ -138,13 +139,29 @@ export class UI {
           <h2>Wardrobe</h2>
           <button class="hud-btn sheet-close" aria-label="Close wardrobe"><span class="ic">✕</span></button>
         </header>
+        <nav class="w-tabs" role="tablist">
+          <button data-tab="look" class="on">🎨<small>Look</small></button>
+          <button data-tab="head">🙂<small>Head</small></button>
+          <button data-tab="hair">💇<small>Hair</small></button>
+          <button data-tab="body">💪<small>Body</small></button>
+          <button data-tab="wear">🎩<small>Wear</small></button>
+        </nav>
         <div class="sheet-body">
-          <section><h3>Look</h3><div class="chips w-skins"></div></section>
-          <section class="w-paint-sec"><h3>Paint</h3><div class="w-paint"></div></section>
-          <section><h3>Head size</h3><div class="seg w-head"></div></section>
-          <section><h3>Hat</h3><div class="w-grid w-hat"></div></section>
-          <section><h3>Face</h3><div class="w-grid w-face"></div></section>
-          <section><h3>Outfit</h3><div class="w-grid w-outfit"></div></section>
+          <section data-tab="look"><h3>Skin</h3><div class="chips w-skins"></div></section>
+          <section data-tab="look" class="w-paint-sec"><h3>Paint</h3><div class="w-paint"></div></section>
+          <section data-tab="head"><h3>Head shape</h3><div class="w-grid w-hshape"></div></section>
+          <section data-tab="head"><h3>Head size</h3><div class="seg w-head"></div></section>
+          <section data-tab="head"><h3>Eyes</h3><div class="w-grid w-eyes"></div></section>
+          <section data-tab="head"><h3>Nose</h3><div class="w-grid w-nose"></div></section>
+          <section data-tab="head"><h3>Ears</h3><div class="w-grid w-ears"></div></section>
+          <section data-tab="hair"><h3>Hair colour</h3><div class="swatches w-haircolor"></div></section>
+          <section data-tab="hair"><h3>Hair</h3><div class="w-grid w-hair"></div></section>
+          <section data-tab="hair"><h3>Beard</h3><div class="w-grid w-beard"></div></section>
+          <section data-tab="body"><h3>Build</h3><div class="w-grid w-build"></div></section>
+          <section data-tab="body"><h3>Feet</h3><div class="seg w-feet"></div></section>
+          <section data-tab="wear"><h3>Hat</h3><div class="w-grid w-hat"></div></section>
+          <section data-tab="wear"><h3>Face extras</h3><div class="w-grid w-face"></div></section>
+          <section data-tab="wear"><h3>Outfit</h3><div class="w-grid w-outfit"></div></section>
         </div>
         <footer class="sheet-foot">
           <button class="soft-btn w-random">🎲 Randomize</button>
@@ -155,6 +172,15 @@ export class UI {
     root.append(this.wardrobe);
     const W = this.wardrobe;
     W.querySelector('.sheet-close').onclick = () => this.toggleWardrobe(false);
+    this.wTab = 'look';
+    for (const t of W.querySelectorAll('.w-tabs button')) {
+      t.onclick = () => {
+        this.wTab = t.dataset.tab;
+        game.sfx.click();
+        this.renderWardrobe();
+        W.querySelector('.sheet-body').scrollTop = 0;
+      };
+    }
     W.querySelector('.w-done').onclick = () => this.toggleWardrobe(false);
     W.querySelector('.w-random').onclick = () => {
       game.sfx.whoosh();
@@ -338,6 +364,30 @@ export class UI {
     cards(W.querySelector('.w-hat'), HATS, look.hat, (id) => m.setLook({ hat: id }), 'room-card');
     cards(W.querySelector('.w-face'), FACES, look.face, (id) => m.setLook({ face: id }), 'room-card');
     cards(W.querySelector('.w-outfit'), OUTFITS, look.outfit, (id) => m.setLook({ outfit: id }), 'room-card');
+    cards(W.querySelector('.w-hshape'), HEAD_SHAPES, look.headShape, (id) => m.setLook({ headShape: id }), 'room-card');
+    cards(W.querySelector('.w-eyes'), EYES, look.eyes, (id) => m.setLook({ eyes: id }), 'room-card');
+    cards(W.querySelector('.w-nose'), NOSES, look.nose, (id) => m.setLook({ nose: id }), 'room-card');
+    cards(W.querySelector('.w-ears'), EARS, look.ears, (id) => m.setLook({ ears: id }), 'room-card');
+    cards(W.querySelector('.w-hair'), HAIR, look.hair, (id) => m.setLook({ hair: id }), 'room-card');
+    cards(W.querySelector('.w-beard'), BEARDS, look.beard, (id) => m.setLook({ beard: id }), 'room-card');
+    cards(W.querySelector('.w-build'), BUILDS, look.build, (id) => m.setLook({ build: id }), 'room-card');
+    cards(W.querySelector('.w-feet'), FEET, look.feet, (id) => m.setLook({ feet: id }), 'seg-btn');
+    const hc = W.querySelector('.w-haircolor');
+    hc.innerHTML = '';
+    for (const c of HAIR_COLORS) {
+      const b = el('button', 'swatch' + (look.hairColor === c ? ' on' : ''));
+      b.style.background = '#' + c.toString(16).padStart(6, '0');
+      b.setAttribute('aria-label', 'Hair colour');
+      b.onclick = () => {
+        game.sfx.click();
+        m.setLook({ hairColor: c });
+        this.renderWardrobe();
+      };
+      hc.append(b);
+    }
+    // Tabs.
+    for (const t of W.querySelectorAll('.w-tabs button')) t.classList.toggle('on', t.dataset.tab === this.wTab);
+    for (const sec of W.querySelectorAll('.sheet-body section')) sec.classList.toggle('hidden', sec.dataset.tab !== this.wTab);
     // Paint rows: picking any colour switches to the custom paint skin.
     const paint = W.querySelector('.w-paint');
     paint.innerHTML = '';

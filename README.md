@@ -109,19 +109,33 @@ card. Tools sit in a dock at the bottom: category tabs, big tiles for the tools 
 and the selected tool's tip above them. Number keys pick a tool within the current category.
 
 **Customize it (👕 Wardrobe):** open it from the 👕 button in the top bar or from Settings. While it's
-open the mannequin stops, poses, and the camera moves in for a close-up. You can change:
-- the look: any skin, or a **custom paint** with your own body, joint and eye colours;
-- the head size (Small, Normal, Big, Huge), which also changes its physics;
-- a hat (23): top hat, cap, party hat, crown, hard hat, cowboy, viking, propeller beanie (it spins),
+open the mannequin stops, poses, and the camera moves in for a close-up. The wardrobe has five tabs:
+- **Look:** any skin, or a custom paint with your own body, joint and eye colours.
+- **Head:**
+  - Shape: Round, Square, Egg, Wide, Tin can.
+  - Size: Small, Normal, Big, Huge. This one is a real physics change.
+  - Eyes: Classic, Round, Big, Beady, Sleepy, Cyclops. They all still blink and follow you.
+  - Nose: Pointy, Round, Button, Long, none.
+  - Ears: none, Round, Elf, Big.
+- **Hair:**
+  - Styles: crew cut, mohawk, afro, spiky, ponytail, bowl cut, long, pigtails, bun, professor.
+  - Beards: full, goatee, chin strap, sideburns, wizard.
+  - A hair-colour palette.
+- **Body:** Build (Slim, Normal, Chunky, Buff, Round belly) and Feet (Tiny, Normal, Clown shoes).
+  These are visual only, so physics and balance stay the same, and outfits stretch to fit the build.
+- **Wear:** 23 hats, face extras and 17 outfits (see below).
+
+🎲 Randomize and ↺ Default are at the bottom. Hats, hair and glasses fit whichever head shape you
+pick. Everything rides on its body part, so a severed head keeps its hair and hat. The look is saved
+between visits.
+
+- hats (23): top hat, cap, party hat, crown, hard hat, cowboy, viking, propeller beanie (it spins),
   chef, beanie, wizard, witch, Santa, pirate, halo, bunny ears, sombrero, beret, grad cap, traffic
   cone, fez, headphones, astronaut helmet;
-- the face: glasses, shades, mustache, clown nose, eye patch, monocle;
-- the outfit (17): bow tie, necktie, cape, scarf, tutu, backpack, tuxedo, life vest, sash, angel
-  wings and devil wings (they flap, faster when it's scared), jetpack (flickering flames), grass
-  skirt, armor, barrel, flower lei, medal.
-
-🎲 Randomize and ↺ Default are at the bottom. Accessories ride on their body part, so a severed head
-keeps its hat. The look is saved between visits.
+- face extras: glasses, shades, mustache, clown nose, eye patch, monocle;
+- outfits (17): bow tie, necktie, cape, scarf, tutu, backpack, tuxedo, life vest, sash, angel wings
+  and devil wings (they flap, faster when it's scared), jetpack (flickering flames), grass skirt,
+  armor, barrel, flower lei, medal.
 
 **Name it:** in ⚙️ Settings (or click the floating name tag above its head), with a 🎲 for random
 suggestions. The name stays over its head, even when that head is
@@ -181,6 +195,7 @@ src/
   joints.js        all joints: break-by-stretch, pose-holding muscles, fixed "stick" joints
   mannequin.js     body layout, skins, sever / damage / reattach logic
   gore.js          optional cartoon gore: droplets, stump fountains, caps, splat decals
+  shapes.js        head shapes, eyes, noses, ears, hair, beards, builds, feet
   accessories.js   wardrobe items (hats, face, outfits), head sizes, paint palette
   life.js          its brain: balance, walking, getting up, crawling, fear behaviour, eyes
   rooms.js         rooms and their hazards
