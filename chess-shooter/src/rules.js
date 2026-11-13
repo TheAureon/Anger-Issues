@@ -125,6 +125,9 @@ export function findKing(st, color) {
   return -1;
 }
 
+// Is a square blocked for movement and lines of fire? (A piece, or a cover crate.)
+export const occ = (st, s) => !!st.board[s] || !!(st.cover && st.cover.includes(s));
+
 // Squares a piece may move to. Moves only go to empty squares: captures are done with guns.
 export function pseudoMoves(st, from) {
   const p = st.board[from];
@@ -137,16 +140,16 @@ export function pseudoMoves(st, from) {
     const dir = p.color === 'w' ? 1 : -1;
     const last = p.color === 'w' ? 7 : 0;
     const one = sqAt(f0, r0 + dir);
-    if (one >= 0 && !st.board[one]) {
+    if (one >= 0 && !occ(st, one)) {
       add(one, rankOf(one) === last ? { promo: true } : {});
       const startRank = p.color === 'w' ? 1 : 6;
       const two = sqAt(f0, r0 + 2 * dir);
-      if (r0 === startRank && two >= 0 && !st.board[two]) add(two, { double: true });
+      if (r0 === startRank && two >= 0 && !occ(st, two)) add(two, { double: true });
     }
   } else if (p.type === 'n' || p.type === 'k') {
     for (const [df, dr] of p.type === 'n' ? KNIGHT : ALL8) {
       const to = sqAt(f0 + df, r0 + dr);
-      if (to >= 0 && !st.board[to]) add(to);
+      if (to >= 0 && !occ(st, to)) add(to);
     }
     if (p.type === 'k' && !p.moved) {
       for (const side of ['K', 'Q']) {
@@ -154,7 +157,7 @@ export function pseudoMoves(st, from) {
         const rook = st.board[rookSq];
         if (!rook || rook.type !== 'r' || rook.color !== p.color || rook.moved) continue;
         const between = side === 'K' ? [5, 6] : [1, 2, 3];
-        if (between.some((f) => st.board[sqAt(f, r0)])) continue;
+        if (between.some((f) => occ(st, sqAt(f, r0)))) continue;
         add(sqAt(side === 'K' ? 6 : 2, r0), { castle: side });
       }
     }
@@ -162,7 +165,7 @@ export function pseudoMoves(st, from) {
     for (const [df, dr] of SLIDE_DIRS[p.type]) {
       for (let i = 1; i < 8; i++) {
         const to = sqAt(f0 + df * i, r0 + dr * i);
-        if (to < 0 || st.board[to]) break;
+        if (to < 0 || occ(st, to)) break;
         add(to);
       }
     }
@@ -185,7 +188,7 @@ export function gunReaches(st, from, to) {
       // Pawn Shotguns: also straight ahead, up to `pawnForward` squares, line clear.
       const fwd = rulesOf(st).pawnForward;
       if (!fwd || df !== 0 || Math.sign(dr) !== dir || adr > fwd) return false;
-      for (let i = 1; i < adr; i++) if (st.board[sqAt(fileOf(from), rankOf(from) + dir * i)]) return false;
+      for (let i = 1; i < adr; i++) if (occ(st, sqAt(fileOf(from), rankOf(from) + dir * i))) return false;
       return true;
     }
     case 'k': {
@@ -194,7 +197,7 @@ export function gunReaches(st, from, to) {
       // Royal Guard: further along the 8 lines, line clear.
       if (kr < 2 || !(df === 0 || dr === 0 || adf === adr) || Math.max(adf, adr) > kr) return false;
       const n = Math.max(adf, adr);
-      for (let i = 1; i < n; i++) if (st.board[sqAt(fileOf(from) + Math.sign(df) * i, rankOf(from) + Math.sign(dr) * i)]) return false;
+      for (let i = 1; i < n; i++) if (occ(st, sqAt(fileOf(from) + Math.sign(df) * i, rankOf(from) + Math.sign(dr) * i))) return false;
       return true;
     }
     case 'n':
@@ -209,7 +212,7 @@ export function gunReaches(st, from, to) {
       if (dist > rulesOf(st).sliderRange) return false;
       const sf = Math.sign(df);
       const sr = Math.sign(dr);
-      for (let i = 1; i < dist; i++) if (st.board[sqAt(fileOf(from) + sf * i, rankOf(from) + sr * i)]) return false;
+      for (let i = 1; i < dist; i++) if (occ(st, sqAt(fileOf(from) + sf * i, rankOf(from) + sr * i))) return false;
       return true;
     }
   }
@@ -255,7 +258,14 @@ export function applyRaw(st, a, killSq = a.kind === 'shoot' ? a.to : null) {
   const n = clone(st);
   const mover = n.board[a.from];
   let resetQuiet = false;
-  if (a.kind === 'move') {
+  // Acting ends your own overwatch; smoke clears after its time is up.
+  if (n.overwatch && n.overwatch[st.turn]) n.overwatch = { ...n.overwatch, [st.turn]: null };
+  if (n.smoke) n.smoke = n.smoke.filter((c) => c.until > st.ply + 1);
+  if (a.kind === 'overwatch' || a.kind === 'smoke') {
+    n.used = { ...(n.used || {}), [st.turn + a.kind]: true };
+    if (a.kind === 'overwatch') n.overwatch = { ...(n.overwatch || {}), [st.turn]: { id: mover.id } };
+    else n.smoke = [...(n.smoke || []), { sq: a.to, until: st.ply + 5 }];
+  } else if (a.kind === 'move') {
     n.board[a.from] = null;
     mover.moved = true;
     if (mover.type === 'p') resetQuiet = true;
@@ -303,6 +313,7 @@ export function legalActions(st, from = null) {
       out.push(m);
     }
     out.push(...pseudoShots(st, s));
+    if (st.tactics) out.push(...abilityActions(st, s));
   }
   if (st.mode !== CLASSIC) return out;
   return out.filter((a) => leavesKingSafe(st, a));
@@ -431,7 +442,33 @@ export function castRay(st, o, d, maxT = Infinity, skip = -1, ignore = null) {
     const t = rayCylinder(o, d, w.x, w.z, dm.r, dm.h);
     if (t < best.t) best = { t, sq: s };
   }
+  if (st.cover) {
+    for (const c of st.cover) {
+      const w = toWorld(c);
+      const t = rayBox(o, d, w.x - COVER.half, 0, w.z - COVER.half, w.x + COVER.half, COVER.h, w.z + COVER.half);
+      if (t < best.t) best = { t, sq: null, cover: c };
+    }
+  }
   return best;
+}
+
+export const COVER = { half: 0.36, h: 0.62 };
+function rayBox(o, d, x0, y0, z0, x1, y1, z1) {
+  let tmin = 0;
+  let tmax = Infinity;
+  for (const [oo, dd, lo, hi] of [[o.x, d.x, x0, x1], [o.y, d.y, y0, y1], [o.z, d.z, z0, z1]]) {
+    if (Math.abs(dd) < 1e-9) {
+      if (oo < lo || oo > hi) return Infinity;
+      continue;
+    }
+    let a = (lo - oo) / dd;
+    let b = (hi - oo) / dd;
+    if (a > b) [a, b] = [b, a];
+    tmin = Math.max(tmin, a);
+    tmax = Math.min(tmax, b);
+    if (tmin > tmax) return Infinity;
+  }
+  return tmin;
 }
 
 function gauss(rng) {
@@ -448,10 +485,22 @@ export function simulateShot(st, from, aim, rng = Math.random, spreadMul = 1) {
   const dx = aim.x - o.x;
   const dy = aim.y - o.y;
   const dz = aim.z - o.z;
-  const sigma = SPREAD[p.type] * spreadMul * rulesOf(st).spreadMul;
+  let sigma = SPREAD[p.type] * spreadMul * rulesOf(st).spreadMul;
+  const wx = st.weather || null;
+  if (wx && wx.rain) sigma *= 1.3;
+  if (st.smoke && st.smoke.length && throughSmoke(st, o, aim)) sigma *= 2.6;
   const yaw = Math.atan2(dx, dz) + gauss(rng) * sigma;
   const pitch = Math.atan2(dy, Math.hypot(dx, dz)) + gauss(rng) * sigma;
   const d = { x: Math.sin(yaw) * Math.cos(pitch), y: Math.sin(pitch), z: Math.cos(yaw) * Math.cos(pitch) };
+  if (wx && wx.wind) {
+    // Wind pushes the bullet sideways: tilt its heading toward the wind and renormalise.
+    d.x += wx.wind.x;
+    d.z += wx.wind.z;
+    const l = Math.hypot(d.x, d.y, d.z);
+    d.x /= l;
+    d.y /= l;
+    d.z /= l;
+  }
   let maxT = maxTravel(p.type, st);
   let ground = false;
   if (d.y < 0) {
@@ -462,13 +511,14 @@ export function simulateShot(st, from, aim, rng = Math.random, spreadMul = 1) {
     }
   }
   const hit = castRay(st, o, d, maxT, from);
-  const t = hit.sq != null ? hit.t : maxT;
+  const t = hit.sq != null || hit.cover != null ? hit.t : maxT;
   return {
     origin: o,
     dir: d,
     hit: hit.sq,
+    cover: hit.cover ?? null,
     end: { x: o.x + d.x * t, y: o.y + d.y * t, z: o.z + d.z * t },
-    ground: hit.sq == null && ground,
+    ground: hit.sq == null && hit.cover == null && ground,
   };
 }
 
@@ -524,7 +574,7 @@ export function visibleSquares(st, color) {
           const t = sqAt(f0 + df * i, r0 + dr * i);
           if (t < 0) break;
           vis.add(t);
-          if (st.board[t]) break;
+          if (occ(st, t)) break;
         }
       }
     }
@@ -542,4 +592,79 @@ export function hiddenEnemySquares(st, color) {
     if (p && p.color !== color && !vis.has(s)) hidden.add(s);
   }
   return hidden;
+}
+
+// --- Tactics: once-per-game abilities ---------------------------------------------------------
+// Rook OVERWATCH: spend your turn watching; the first enemy that moves into its line of fire gets
+// shot at automatically (until your next turn). Bishop SMOKE: throw a grenade onto a square on its
+// diagonals within range; bullets through the 3x3 cloud wobble far more, for two turns each side.
+
+export const SMOKE_TURNS = 5; // plies
+export function abilityActions(st, from) {
+  const p = st.board[from];
+  if (!p) return [];
+  const used = st.used || {};
+  if (p.type === 'r' && !used[p.color + 'overwatch']) return [{ kind: 'overwatch', from, to: from }];
+  if (p.type === 'b' && !used[p.color + 'smoke']) {
+    const out = [];
+    const range = rulesOf(st).sliderRange;
+    for (const [df, dr] of DIAG) {
+      for (let i = 1; i <= range; i++) {
+        const t = sqAt(fileOf(from) + df * i, rankOf(from) + dr * i);
+        if (t < 0) break;
+        out.push({ kind: 'smoke', from, to: t });
+      }
+    }
+    return out;
+  }
+  return [];
+}
+export const smokeAt = (st, s) =>
+  !!st.smoke && st.smoke.some((c) => Math.abs(fileOf(c.sq) - fileOf(s)) <= 1 && Math.abs(rankOf(c.sq) - rankOf(s)) <= 1);
+function throughSmoke(st, o, aim) {
+  for (let i = 1; i <= 12; i++) {
+    const k = i / 12;
+    const s = worldToSq(o.x + (aim.x - o.x) * k, o.z + (aim.z - o.z) * k);
+    if (s >= 0 && smokeAt(st, s)) return true;
+  }
+  return false;
+}
+// After `color`'s opponent moves a piece to `sq`: the square of `color`'s overwatching rook that
+// fires at it, or -1.
+export function overwatchShooter(st, color, sq) {
+  const ow = st.overwatch && st.overwatch[color];
+  if (!ow) return -1;
+  for (let s = 0; s < 64; s++) {
+    const p = st.board[s];
+    if (p && p.id === ow.id) return isTargetable(st, s, sq) ? s : -1;
+  }
+  return -1;
+}
+// Resolve an overwatch shot: no turn passes, and the overwatch is spent.
+export function applyOverwatch(st, color, killSq) {
+  const n = clone(st);
+  n.overwatch = { ...(n.overwatch || {}), [color]: null };
+  if (killSq != null && n.board[killSq] && !(n.board[killSq].type === 'k' && n.mode === CLASSIC)) n.board[killSq] = null;
+  return n;
+}
+
+// --- Variants: cover crates and weather -------------------------------------------------------
+// Six crates, mirrored between the two halves so neither side is favoured.
+export function makeCover(rng = Math.random) {
+  const files = [0, 1, 2, 3, 4, 5, 6, 7].sort(() => rng() - 0.5).slice(0, 3);
+  const out = [];
+  files.forEach((f, i) => {
+    const r = 2 + (i % 2); // ranks 3-4 for White's half
+    out.push(sqAt(f, r), sqAt(7 - f, 7 - r));
+  });
+  return out;
+}
+export function makeWeather(kind, rng = Math.random) {
+  if (kind === 'wind') {
+    const a = rng() * Math.PI * 2;
+    const k = 0.05 + rng() * 0.04;
+    return { wind: { x: Math.cos(a) * k, z: Math.sin(a) * k }, kph: Math.round(k * 600) };
+  }
+  if (kind === 'rain') return { rain: true };
+  return null;
 }

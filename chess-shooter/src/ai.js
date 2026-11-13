@@ -95,7 +95,7 @@ function replyValue(st, me, aim = AI_SPREAD) {
   let worst = Infinity;
   for (const b of acts) {
     let v;
-    if (b.kind === 'move') {
+    if (b.kind !== 'shoot') {
       v = evaluate(applyRaw(st, b), me);
     } else {
       const hit = applyRaw(st, b);
@@ -110,7 +110,7 @@ function replyValue(st, me, aim = AI_SPREAD) {
 
 // Expected score (for `me`) of taking action `a` in `st`, judged right after it.
 function oneply(st, a, me, aim) {
-  if (a.kind === 'move') return evaluate(applyRaw(st, a.promo ? { ...a, promoType: 'q' } : a), me);
+  if (a.kind !== 'shoot') return evaluate(applyRaw(st, a.promo ? { ...a, promoType: 'q' } : a), me);
   const hit = applyRaw(st, a);
   const tv = terminalValue(hit, me);
   const p = approxHit(st, a, aim);
@@ -138,7 +138,7 @@ function replyValueDeep(st, me, aim, width = 6) {
   let worst = Infinity;
   for (const { b } of scored) {
     let v;
-    if (b.kind === 'move') v = myBest(applyRaw(st, b.promo ? { ...b, promoType: 'q' } : b), me, aim);
+    if (b.kind !== 'shoot') v = myBest(applyRaw(st, b.promo ? { ...b, promoType: 'q' } : b), me, aim);
     else {
       const p = approxHit(st, b, aim);
       v = p * myBest(applyRaw(st, b), me, aim) + (1 - p) * myBest(passTurn(st), me, aim);
@@ -174,7 +174,7 @@ export function chooseAction(st, level = 'normal', rng = Math.random) {
   for (const { a } of scored) {
     let v;
     if (cfg.depth === 1) v = oneply(st, a, me, cfg.aim);
-    else if (a.kind === 'move') v = reply(applyRaw(st, promote(a)));
+    else if (a.kind !== 'shoot') v = reply(applyRaw(st, promote(a)));
     else {
       const p = hitChance(st, a.from, a.to, aimCenter(st, a.to), 48, cfg.aim);
       v = p * reply(applyRaw(st, a)) + (1 - p) * reply(passTurn(st));

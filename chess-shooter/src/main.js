@@ -17,6 +17,8 @@ import {
 } from './progress.js';
 import { puzzleBattle, weeklyBattle, gauntletBattle, puzzleFor, weeklyFor, weekKey, GAUNTLET, GAUNTLET_XP, PUZZLE_XP, WEEKLY_XP } from './challenges.js';
 import { TRACKS } from './music.js';
+import { LIBRARY, PACKS, WEEKLY_PUZZLE_XP, HINT_COST, goalText, puzzleToBattle, weeklyPuzzle, encodePuzzle, decodePuzzle, parseSq } from './puzzles.js';
+import { genDrill, genBestTarget } from './puzzlegen.js';
 import { BATTLES, CHAPTERS, starGoals } from './campaign.js';
 
 const $ = (id) => document.getElementById(id);
@@ -74,6 +76,58 @@ let viewKick = 0;
 // --- Markers -------------------------------------------------------------------------------
 
 const markerRoot = new THREE.Group();
+const coverRoot = new THREE.Group(); // crates
+const smokeRoot = new THREE.Group(); // smoke clouds
+scene.add(coverRoot, smokeRoot);
+const crateGeo = new THREE.BoxGeometry(0.72, 0.62, 0.72);
+const crateMat = new THREE.MeshStandardMaterial({ color: 0x9a6b3c, roughness: 0.85, flatShading: true });
+const crateBandMat = new THREE.MeshStandardMaterial({ color: 0x5e3d20, roughness: 0.9, flatShading: true });
+const smokeGeo = new THREE.IcosahedronGeometry(0.32, 0);
+const smokeMat = new THREE.MeshStandardMaterial({ color: 0xc9ccd2, transparent: true, opacity: 0.5, depthWrite: false, flatShading: true });
+const hintMat = new THREE.MeshBasicMaterial({ color: 0xffd34d });
+const owMat = new THREE.MeshBasicMaterial({ color: 0x5cc8ff });
+const smokeTargetMat = new THREE.MeshBasicMaterial({ color: 0xbfc4cc, transparent: true, opacity: 0.7, depthWrite: false });
+let smokeKey = '';
+function buildCrate() {
+  const g = new THREE.Group();
+  const box = new THREE.Mesh(crateGeo, crateMat);
+  box.position.y = 0.31;
+  box.castShadow = box.receiveShadow = true;
+  g.add(box);
+  for (const y of [0.08, 0.54]) {
+    const band = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.07, 0.75), crateBandMat);
+    band.position.y = y;
+    g.add(band);
+  }
+  const x = new THREE.Mesh(new THREE.BoxGeometry(0.74, 0.07, 0.07), crateBandMat);
+  x.position.set(0, 0.31, 0.37);
+  x.rotation.z = 0.7;
+  g.add(x);
+  return g;
+}
+function renderSmoke() {
+  const key = st && st.smoke ? st.smoke.map((c) => c.sq).join(',') : '';
+  if (key === smokeKey) return;
+  smokeKey = key;
+  smokeRoot.clear();
+  if (!st || !st.smoke) return;
+  for (const c of st.smoke) {
+    for (let df = -1; df <= 1; df++) {
+      for (let dr = -1; dr <= 1; dr++) {
+        const s = R.sqAt(R.fileOf(c.sq) + df, R.rankOf(c.sq) + dr);
+        if (s < 0) continue;
+        const w = R.toWorld(s);
+        for (let i = 0; i < 2; i++) {
+          const m = new THREE.Mesh(smokeGeo, smokeMat);
+          m.position.set(w.x + (Math.random() - 0.5) * 0.4, 0.35 + i * 0.45 + Math.random() * 0.2, w.z + (Math.random() - 0.5) * 0.4);
+          m.scale.setScalar(0.9 + Math.random() * 0.8);
+          m.userData.seed = Math.random() * 10;
+          smokeRoot.add(m);
+        }
+      }
+    }
+  }
+}
 scene.add(markerRoot);
 const moveGeo = new THREE.CircleGeometry(0.1, 24).rotateX(-Math.PI / 2);
 const moveRingGeo = new THREE.RingGeometry(0.25, 0.3, 40).rotateX(-Math.PI / 2);
@@ -113,6 +167,20 @@ const names = { w: loadPref('gunmate-name-w', 'Player 1'), b: loadPref('gunmate-
 let handoffOn = loadPref('gunmate-handoff', '1') === '1';
 let pendingTurn = null; // piece id to look through once the next player taps Ready
 let lastDesc = '';
+// Puzzles, replays and abilities.
+const PRACTICE = new Set(['library', 'code', 'test', 'wpuzzle', 'rush']); // no normal XP or contracts
+let hintLevel = 0; // 0 none, 1 piece shown, 2 piece + square shown
+let oddsPick = null; // { ok, chosen, best, bestDesc } for Odds puzzles
+let abilityMode = null; // 'smoke' while choosing where to throw
+let replaying = false;
+let history = null; // { start, events: [...] } of the current game
+let scoped = false; // sniper scope
+// Optional variants for normal games (setup screen): cover crates, weather, tactics abilities.
+const variants = {
+  cover: loadPref('gunmate-v-cover', '0') === '1',
+  weather: loadPref('gunmate-v-weather', 'clear'),
+  tactics: loadPref('gunmate-v-tactics', '0') === '1',
+};
 // Per-game opponent and campaign state.
 let battle = null; // current campaign battle, or null
 let aiLevel = 'normal'; // difficulty key or config object for chooseAction
@@ -169,6 +237,7 @@ let started = false;
 const viewerColor = () => (vsAI ? human : st.turn);
 const playerName = (c) => (vsAI ? (c === human ? 'You' : aiName) : names[c] || COLOR_NAME[c]);
 const pieceName = (p) => R.NAMES[p.type].toLowerCase();
+const possessive = (c) => (playerName(c) === 'You' ? 'Your' : `${playerName(c)}'s`);
 const humanTurn = () => started && !paused && st && !st.result && (!vsAI || st.turn === human);
 
 function sqOfId(id) {
@@ -208,6 +277,15 @@ const TRACER_COLORS = { p: 0x6dff8a, n: 0xc07bff, b: 0x5ce8ff, r: 0xff5a4a, q: 0
 function placeAll() {
   for (const g of groups.values()) scene.remove(g);
   groups.clear();
+  coverRoot.clear();
+  for (const c of (st && st.cover) || []) {
+    const w = R.toWorld(c);
+    const crate = buildCrate();
+    crate.position.set(w.x, 0, w.z);
+    crate.rotation.y = (c % 3) * 0.06;
+    coverRoot.add(crate);
+  }
+  smokeKey = 'x';
   for (let s = 0; s < 64; s++) {
     const p = st.board[s];
     if (!p) continue;
@@ -234,7 +312,7 @@ function desiredPose(pos, quat) {
   const g = povId != null ? groups.get(povId) : null;
   if (viewMode === 'pov' && g) {
     pos.set(g.position.x, g.position.y + g.userData.h * R.EYE, g.position.z);
-    _euler.set(pitch, yaw, 0, 'YXZ');
+    _euler.set(pitch + swayP, yaw + swayY, 0, 'YXZ');
     quat.setFromEuler(_euler);
   } else {
     pos.set(Math.sin(ovYaw) * Math.cos(ovPitch) * ovDist, Math.sin(ovPitch) * ovDist, Math.cos(ovYaw) * Math.cos(ovPitch) * ovDist);
@@ -258,13 +336,19 @@ function setViewGun() {
   viewScene.add(viewGun);
 }
 
-function setPov(id, { keepView = false } = {}) {
+function setPov(id, { keepView = false, stay = false } = {}) {
   const s = sqOfId(id);
   if (s < 0) return;
   const p = st.board[s];
   const changed = id !== povId;
   povId = id;
   remembered[p.color] = id;
+  if (stay && viewMode === 'over') {
+    // Select the piece without leaving the overview camera (Puzzle Rush, replays).
+    setViewGun();
+    refresh();
+    return;
+  }
   if (!keepView) {
     yaw = FORWARD_YAW[p.color];
     pitch = POV_PITCH;
@@ -382,7 +466,7 @@ function renderGraves() {
 let current = { from: -1, moves: [], targets: [], coverage: new Set() };
 
 function updateFog() {
-  if (st && started && st.mode === R.FOG && !st.result) {
+  if (st && started && st.mode === R.FOG && !st.result && !replaying) {
     fogVisible = R.visibleSquares(st, fogView);
     fogHidden = R.hiddenEnemySquares(st, fogView);
   } else {
@@ -449,6 +533,57 @@ function refresh() {
     if (fogVisible && !fogVisible.has(s)) t.material.color.lerp(TINT.fog, 0.62);
   }
 
+  // Smoke clouds, overwatch, hints and smoke-throw targets.
+  renderSmoke();
+  const owSquares = new Set();
+  for (const c of ['w', 'b']) {
+    const ow = st.overwatch && st.overwatch[c];
+    if (!ow) continue;
+    const rs = sqOfId(ow.id);
+    if (rs < 0 || fogHidden.has(rs)) continue;
+    for (const q of R.gunCoverage(st, rs)) owSquares.add(q);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.03, 4, 16), owMat);
+    ring.rotation.x = Math.PI / 2;
+    const w = R.toWorld(rs);
+    ring.position.set(w.x, R.DIMS.r.h + 0.25, w.z);
+    markerRoot.add(ring);
+  }
+  for (const q of owSquares) tiles[q].material.color.lerp(TINT.active, 0.3);
+  current.hint = null;
+  if (battle && battle.hint && hintLevel > 0 && !st.result) {
+    const hf = parseSq(battle.hint.from);
+    const ht = parseSq(battle.hint.to);
+    current.hint = { from: hf, to: hintLevel > 1 ? ht : -1 };
+    const r1 = new THREE.Mesh(new THREE.TorusGeometry(0.46, 0.05, 4, 24), hintMat);
+    r1.rotation.x = Math.PI / 2;
+    const w1 = R.toWorld(hf);
+    r1.position.set(w1.x, 0.03, w1.z);
+    markerRoot.add(r1);
+    if (hintLevel > 1 && battle.puzzle && battle.puzzle.aim) {
+      const a = battle.puzzle.aim;
+      const dot = new THREE.Mesh(new THREE.SphereGeometry(0.035, 10, 8), hintMat);
+      dot.position.set(a.x, a.y, a.z);
+      markerRoot.add(dot);
+    }
+    if (hintLevel > 1) {
+      const w2 = R.toWorld(ht);
+      const d = new THREE.Mesh(diamondGeo, hintMat);
+      d.position.set(w2.x, (st.board[ht] ? R.DIMS[st.board[ht].type].h : 0.2) + 0.5, w2.z);
+      d.scale.setScalar(1.8);
+      markerRoot.add(d);
+    }
+  }
+  current.smokeTargets = [];
+  if (abilityMode === 'smoke' && mine) {
+    current.smokeTargets = R.abilityActions(st, from).filter((a) => a.kind === 'smoke').map((a) => a.to);
+    for (const q of current.smokeTargets) {
+      const w = R.toWorld(q);
+      const m = new THREE.Mesh(moveRingGeo, smokeTargetMat);
+      m.position.set(w.x, 0.013, w.z);
+      markerRoot.add(m);
+    }
+  }
+
   activeRing.visible = from >= 0;
   if (from >= 0) {
     const w = R.toWorld(from);
@@ -465,9 +600,16 @@ function refresh() {
   $('turn-badge').innerHTML = pieceIcon('k', st.turn);
   $('turn').className = `glass turn-${st.turn}`;
   let tag = MODE_LINE[st.mode] + (vsAI ? ` · vs ${aiName}` : ' · pass & play');
+  const extras = [st.cover && 'Cover', st.weather && st.weather.wind && 'Wind', st.weather && st.weather.rain && 'Rain', st.tactics && 'Tactics'].filter(Boolean);
+  if (extras.length) tag += ' · ' + extras.join(' · ');
   if (battle) {
     tag = battle.kind ? `${battle.name} · ${MODE_LABEL[st.mode]}` : `Campaign · ${battle.name} · ${MODE_LABEL[st.mode]}`;
-    if (battle.turnLimit) tag += ` · ${Math.max(0, battle.turnLimit - myTurnsSoFar())} turns left`;
+    if (battle.goal) tag = `${battle.name} · ${goalText(battle.goal, st)}${st.rules && st.rules.spreadMul === 0 ? ' · sure-shot' : ''}`;
+    if (battle.kind === 'rush') tag = `Puzzle Rush · ${battle.prompt}`;
+    if (battle.turnLimit) {
+      const left = Math.max(0, battle.turnLimit - myTurnsSoFar());
+      tag += ` · ${left} turn${left === 1 ? '' : 's'} left`;
+    }
   }
   $('mode-tag').textContent = tag;
   $('mode-tag').className = st.mode;
@@ -485,10 +627,18 @@ function refresh() {
     $('card-count').innerHTML = mine
       ? `<span class="cnt mv" title="Squares it can move to">${nm}<small>move${nm === 1 ? '' : 's'}</small></span><span class="cnt tg ${nt ? 'on' : ''}" title="Enemies in range">${nt}<small>target${nt === 1 ? '' : 's'}</small></span>`
       : '';
-  }
+    const ab = mine && st.tactics ? acts.find((a) => a.kind === 'overwatch' || a.kind === 'smoke') : null;
+    $('card-ability').classList.toggle('hidden', !ab);
+    if (ab) {
+      $('card-ability').textContent = ab.kind === 'overwatch' ? '👁 Overwatch (uses your turn)' : abilityMode === 'smoke' ? '✕ Cancel smoke' : '💨 Throw smoke';
+      $('card-ability').classList.toggle('on', abilityMode === 'smoke');
+    }
+  } else $('card-ability').classList.add('hidden');
   $('minimap').classList.toggle('flip', false);
   minimap.flip = viewerColor() === 'b';
   $('btn-view').classList.toggle('on', viewMode === 'over');
+  updateHintButton();
+  $('btn-scope').classList.toggle('hidden', !(started && viewMode === 'pov' && !replaying && !(battle && battle.kind === 'rush')));
   drawMap();
   updateHover();
   updateMood();
@@ -509,6 +659,10 @@ function drawMap() {
     fog: fogVisible,
     hidden: fogHidden,
     checkSq: !fogVisible && checkK >= 0 && R.attackedBy(st, checkK, R.other(st.turn)) ? checkK : -1,
+    cover: st.cover || null,
+    smoke: st.smoke && st.smoke.length ? (q) => R.smokeAt(st, q) : null,
+    hint: current.hint || null,
+    smokeTargets: current.smokeTargets || null,
     cone: viewMode === 'pov' && current.from >= 0 ? { s: current.from, yaw, fov: (2 * Math.atan(Math.tan((camera.fov * Math.PI) / 360) * camera.aspect)) } : null,
   });
 }
@@ -568,11 +722,21 @@ function updateHover() {
 
 function onSquare(sq, aim = null) {
   if (!st || st.result) return;
+  if (replaying) return;
   const p = seen(sq);
+  const rush = battle && battle.kind === 'rush';
+  if (abilityMode === 'smoke' && !busy && humanTurn()) {
+    const from0 = sqOfId(povId);
+    const a0 = R.abilityActions(st, from0).find((a) => a.kind === 'smoke' && a.to === sq);
+    abilityMode = null;
+    if (a0) return doAbility(a0, true);
+    refresh();
+    if (!p || p.color !== viewerColor()) return status('Smoke cancelled.', 'warn');
+  }
   if (p && p.color === viewerColor()) {
-    if (p.id !== povId || viewMode !== 'pov') {
+    if (p.id !== povId || (viewMode !== 'pov' && !rush)) {
       sfx.click();
-      setPov(p.id);
+      setPov(p.id, { stay: rush });
     }
     return;
   }
@@ -580,10 +744,19 @@ function onSquare(sq, aim = null) {
   const from = sqOfId(povId);
   if (from < 0) return;
   const acts = R.legalActions(st, from);
+  if (rush) {
+    const a = acts.find((x) => x.to === sq && (x.kind === 'move' || x.kind === 'shoot'));
+    if (a) return rushPick(a, aim);
+    return status('Pick one of your pieces, then its target.', 'warn');
+  }
   const mv = acts.find((a) => a.kind === 'move' && a.to === sq);
   if (mv) return doMove(mv, true);
   const sh = acts.find((a) => a.kind === 'shoot' && a.to === sq);
-  if (sh) return doShoot(sh, aim || R.aimCenter(st, sq), 1, true);
+  if (sh) {
+    const useAim = aim || R.aimCenter(st, sq);
+    if (battle && battle.goal && battle.goal.type === 'odds') oddsPick = gradeOdds(from, sq, useAim);
+    return doShoot(sh, useAim, 1, true);
+  }
   if (fogHidden.has(sq)) return status('Something is blocking that square in the fog.', 'warn');
   const why = explain(from, sq);
   if (why) status(why, 'warn');
@@ -618,6 +791,7 @@ async function doMove(a, byHuman) {
   const tok = gameToken;
   busy = true;
   if (a.promo && byHuman) a = { ...a, promoType: await askPromotion() };
+  if (!replaying && history) history.events.push({ type: 'move', a });
   refresh();
   const p = st.board[a.from];
   const g = groups.get(p.id);
@@ -634,7 +808,7 @@ async function doMove(a, byHuman) {
   await Promise.all(jobs);
   if (tok !== gameToken) return;
   sfx.step();
-  progress.onMove({ mine: byHuman, castle: !!a.castle, promo: !!a.promo });
+  if (!replaying) progress.onMove({ mine: byHuman, castle: !!a.castle, promo: !!a.promo });
   const next = R.applyRaw(st, a);
   if (a.promo) {
     // Swap the mesh for the promoted piece.
@@ -657,6 +831,8 @@ async function doMove(a, byHuman) {
     squares: new Set([a.from, a.to]),
     line: { kind: 'move', a: { f: f.x + 4, r: 4 - f.z }, b: { f: to.x + 4, r: 4 - to.z } },
     desc,
+    action: a,
+    by: byHuman ? 'human' : 'ai',
   }, tok);
 }
 
@@ -670,14 +846,15 @@ function turnTo(g, target, dur = 0.18) {
   return tween(dur, (k) => (g.rotation.y = a + d * ease(k)));
 }
 
-async function doShoot(a, aim, spreadMul, mine = false) {
+async function doShoot(a, aim, spreadMul, mine = false, opts = {}) {
   const tok = gameToken;
   busy = true;
   refresh();
   const shooter = st.board[a.from];
   const g = groups.get(shooter.id);
-  const chance = mine ? R.hitChance(st, a.from, a.to, aim, 120, spreadMul) : 1;
-  const res = R.simulateShot(st, a.from, aim, Math.random, spreadMul);
+  const chance = opts.chance ?? (mine && !replaying ? R.hitChance(st, a.from, a.to, aim, 120, spreadMul) : 1);
+  const res = opts.forced || R.simulateShot(st, a.from, aim, Math.random, spreadMul);
+  if (!replaying && history) history.events.push({ type: 'shoot', a, aim, res, mine, chance, snap: R.clone(st) });
   const end = new THREE.Vector3(res.end.x, res.end.y, res.end.z);
   await turnTo(g, faceYaw(g.position, res.end.x, res.end.z));
 
@@ -699,7 +876,7 @@ async function doShoot(a, aim, spreadMul, mine = false) {
   const target0 = res.hit != null ? st.board[res.hit] : null;
   const dist0 = Math.max(Math.abs(R.fileOf(a.to) - R.fileOf(a.from)), Math.abs(R.rankOf(a.to) - R.rankOf(a.from)));
   const lethal = target0 && target0.color !== shooter.color && !(target0.type === 'k' && st.mode === R.CLASSIC);
-  const useCam = settings.killcam && progress.perk('killcam') && lethal && ((mine && dist0 >= 3) || target0.type === 'k') && !fogHidden.has(a.from);
+  const useCam = opts.killcam || (!replaying && settings.killcam && progress.perk('killcam') && lethal && ((mine && dist0 >= 3) || target0.type === 'k') && !fogHidden.has(a.from));
   const tracerColor = mine && masteryTier(progress.p.mastery[shooter.type]) >= 3 ? TRACER_COLORS[shooter.type] : null;
   if (useCam) {
     // Kill-cam: follow the bullet in slow motion.
@@ -714,10 +891,10 @@ async function doShoot(a, aim, spreadMul, mine = false) {
   let kill = null;
   let victimDesc = '';
   const hitPiece = res.hit != null ? st.board[res.hit] : null;
-  if (mine && hitPiece && hitPiece.color !== shooter.color && !(hitPiece.type === 'k' && st.mode === R.CLASSIC)) {
+  if (!replaying && mine && hitPiece && hitPiece.color !== shooter.color && !(hitPiece.type === 'k' && st.mode === R.CLASSIC)) {
     enemyMaterialShot += LB_MATERIAL[hitPiece.type];
   }
-  progress.onShot({
+  if (!replaying) progress.onShot({
     mine,
     shooterType: shooter.type,
     intended: a.to,
@@ -757,7 +934,11 @@ async function doShoot(a, aim, spreadMul, mine = false) {
       fx.sparks(end, 6, 0xd9c49b);
     }
     sfx.thud();
-    status(res.ground ? 'Missed! The bullet hit the floor.' : 'Missed! The bullet flew past.', 'warn');
+    if (res.cover != null) {
+      fx.sparks(end, 12, 0x9a6a3a);
+      fx.dust(end, 5);
+      status('Blocked! The crate stopped the bullet.', 'warn');
+    } else status(res.ground ? 'Missed! The bullet hit the floor.' : 'Missed! The bullet flew past.', 'warn');
   }
   if (killcam) {
     await wait(650);
@@ -767,7 +948,7 @@ async function doShoot(a, aim, spreadMul, mine = false) {
   turnTo(g, FORWARD_YAW[shooter.color], 0.4);
   const f = R.toWorld(a.from);
   const target = st.board[a.to];
-  const who = `${playerName(shooter.color)}'s ${pieceName(shooter)}`;
+  const who = `${possessive(shooter.color)} ${pieceName(shooter)}`;
   let desc;
   if (hitPiece && kill == null) desc = `${who} fired at your ${pieceName(target)}, but the bullet ricocheted off a king.`;
   else if (kill == null) desc = `${who} fired at your ${pieceName(target)} on ${R.sqName(a.to)} and missed.`;
@@ -780,6 +961,8 @@ async function doShoot(a, aim, spreadMul, mine = false) {
     squares: new Set([a.from, ...(kill != null ? [kill] : [])]),
     line: { kind: 'shoot', hit: kill != null, a: { f: f.x + 4, r: 4 - f.z }, b: { f: res.end.x + 4, r: 4 - res.end.z } },
     desc,
+    action: a,
+    by: mine ? 'human' : 'ai',
   }, tok);
 }
 
@@ -788,16 +971,22 @@ function commit(next, lastInfo, tok = gameToken) {
   st = next;
   last = lastInfo;
   lastDesc = lastInfo.desc || '';
+  if (replaying) {
+    busy = false;
+    refresh();
+    return;
+  }
+  if (battle && battle.kind === 'rush') {
+    refresh();
+    rushAfter();
+    return;
+  }
   if (vsAI) {
     let diff = 0;
     for (const p of st.board) if (p && p.type !== 'k') diff += (p.color === human ? 1 : -1) * R.VALUE[p.type];
     progress.onMaterial(diff);
   }
-  let result = R.judge(st);
-  // Campaign deadline: lose if you haven't won within the battle's turn limit.
-  if (!result && battle && battle.turnLimit && st.turn !== human && myTurnsSoFar() >= battle.turnLimit) {
-    result = { winner: R.other(human), reason: `out of turns: the deadline was ${battle.turnLimit} turns` };
-  }
+  let result = R.judge(st) || goalResult(lastInfo);
   if (result) {
     st.result = result;
     busy = false;
@@ -805,6 +994,19 @@ function commit(next, lastInfo, tok = gameToken) {
     gameOver(result);
     return;
   }
+  // Overwatch: a rook watching for exactly this move fires before the turn passes.
+  const act = lastInfo.action;
+  if (act && act.kind === 'move') {
+    const rookSq = R.overwatchShooter(st, st.turn, act.to);
+    if (rookSq >= 0) {
+      fireOverwatch(rookSq, act.to, tok);
+      return;
+    }
+  }
+  afterCommit();
+}
+
+function afterCommit() {
   // If the piece we were looking through died, fall back to the king.
   for (const c of ['w', 'b']) if (sqOfId(remembered[c]) < 0) remembered[c] = kingId(c);
   if (sqOfId(povId) < 0) {
@@ -821,6 +1023,158 @@ function commit(next, lastInfo, tok = gameToken) {
   nextTurn();
 }
 
+// Library / code / editor-test / weekly puzzle results on the game-over screen.
+function renderPuzzleResult(solved) {
+  if (!battle || !['library', 'code', 'test', 'wpuzzle'].includes(battle.kind)) return;
+  const el = $('ov-challenge');
+  const next = $('btn-next-battle');
+  let html = '';
+  if (battle.kind === 'library') {
+    if (solved) {
+      const r = progress.recordLibrary(battle.id, { hints: hintLevel > 0 });
+      const n = r.stars;
+      html = `<span class="lib-stars">${'★'.repeat(n)}${'☆'.repeat(3 - n)}</span> ${n === 3 ? 'Perfect!' : hintLevel ? 'Solve it without hints for more stars.' : 'Solve it first try for 3 stars.'}`;
+    } else {
+      progress.failLibrary(battle.id);
+      html = `Not this time. ${battle.hint ? 'Stuck? Try a hint (top bar).' : ''}`;
+    }
+    const i = LIBRARY.findIndex((x) => x.id === battle.id);
+    const nx = LIBRARY[i + 1];
+    if (solved && nx) {
+      next.classList.remove('hidden');
+      next.lastChild.textContent = 'Next puzzle';
+      next.dataset.next = nx.id;
+    }
+  } else if (battle.kind === 'wpuzzle') {
+    html = !solved ? 'The puzzle of the week stays the same until Monday.' : progress.solveWeeklyPuzzle(weekKey()).already ? 'Solved again! (This week’s reward was already claimed.)' : `Puzzle of the week: <b>+${WEEKLY_PUZZLE_XP} XP</b>`;
+  } else if (battle.kind === 'test') {
+    html = solved ? 'Your puzzle works! Copy its code from the editor to share it.' : 'Your puzzle wasn’t solved this time. Is it possible? Try again or tweak it.';
+    next.classList.remove('hidden');
+    next.lastChild.textContent = 'Back to the editor';
+    next.dataset.next = 'editor';
+  } else html = solved ? 'Solved! Share the code with a friend.' : 'Try again: the code always gives the same puzzle.';
+  el.innerHTML = html;
+  el.classList.remove('hidden');
+}
+
+// Odds puzzles: compare the chosen shot's chance with the best shot on the board.
+function gradeOdds(from, to, aim) {
+  const chosen = R.hitChance(st, from, to, aim, 400);
+  let best = { chance: 0 };
+  for (const a of R.legalActions(st)) {
+    if (a.kind !== 'shoot') continue;
+    const c = R.hitChance(st, a.from, a.to, R.aimCenter(st, a.to), 400);
+    if (c > best.chance) best = { chance: c, a };
+  }
+  const bestDesc = best.a ? `${R.NAMES[st.board[best.a.from].type].toLowerCase()} on ${R.sqName(best.a.from)} at the ${R.NAMES[st.board[best.a.to].type].toLowerCase()} on ${R.sqName(best.a.to)}` : '';
+  return { ok: chosen >= best.chance - 0.04, chosen, best: best.chance, bestDesc };
+}
+
+// Puzzle and battle goals beyond "shoot the king": kill a target, survive, promote, pick the best
+// odds, and deadlines.
+function goalResult(info) {
+  if (!battle) return null;
+  const g = battle.goal || { type: 'king', n: battle.turnLimit || 0 };
+  const humanActed = st.turn !== human;
+  const win = (reason) => ({ winner: human, reason });
+  const lose = (reason) => ({ winner: R.other(human), reason });
+  if (g.type === 'kill' && !st.board.some((p) => p && p.id === battle.targetId)) return win('target down');
+  if (g.type === 'promote' && info.by === 'human' && info.action && info.action.promo) return win('pawn promoted');
+  if (g.type === 'odds' && humanActed && oddsPick) {
+    const p = oddsPick;
+    oddsPick = null;
+    return p.ok
+      ? win(`${Math.round(p.chosen * 100)}% was the best shot on the board`)
+      : lose(`the best shot was ${Math.round(p.best * 100)}% (${p.bestDesc}); you took ${Math.round(p.chosen * 100)}%`);
+  }
+  if (g.type === 'survive') {
+    const enemyTurns = human === 'w' ? Math.floor(st.ply / 2) : Math.ceil(st.ply / 2);
+    if (!humanActed && enemyTurns >= g.n) return win(`survived ${g.n} enemy turn${g.n > 1 ? 's' : ''}`);
+    return null;
+  }
+  if (g.n && humanActed && myTurnsSoFar() >= g.n) return lose(g.type === 'kill' ? 'the target survived' : `out of turns: the deadline was ${g.n} turn${g.n > 1 ? 's' : ''}`);
+  return null;
+}
+
+// A rook on overwatch fires at the enemy piece that just moved into its line.
+async function fireOverwatch(from, to, tok, forced = null) {
+  busy = true;
+  const color = st.board[from].color;
+  const g = groups.get(st.board[from].id);
+  const res = forced || R.simulateShot(st, from, R.aimCenter(st, to), Math.random, 1);
+  if (!replaying && history) history.events.push({ type: 'ow', from, to, res });
+  banner('Overwatch!', 1100);
+  await turnTo(g, faceYaw(g.position, res.end.x, res.end.z));
+  const start = new THREE.Vector3();
+  g.userData.gun.getObjectByName('muzzle').getWorldPosition(start);
+  fx.muzzleFlash(start);
+  sfx.gunshot('r');
+  await fx.tracer(start, new THREE.Vector3(res.end.x, res.end.y, res.end.z));
+  if (tok !== gameToken) return;
+  let kill = null;
+  const victim = res.hit != null ? st.board[res.hit] : null;
+  if (victim && !(victim.type === 'k' && st.mode === R.CLASSIC)) {
+    kill = res.hit;
+    const vg = groups.get(victim.id);
+    fx.shatter(vg, new THREE.Vector3(res.dir.x, 0, res.dir.z).normalize());
+    scene.remove(vg);
+    groups.delete(victim.id);
+    graves[victim.color].push(victim.type);
+    renderGraves();
+    sfx.shatter();
+    status(`Overwatch hit! ${pieceLabel(victim)} down.`, victim.color === human ? 'bad' : 'good');
+  } else status('Overwatch fired and missed.', 'warn');
+  turnTo(g, FORWARD_YAW[color], 0.4);
+  st = R.applyOverwatch(st, color, kill);
+  await wait(300);
+  if (tok !== gameToken) return;
+  if (replaying) {
+    busy = false;
+    refresh();
+    return;
+  }
+  const result = R.judge(st) || goalResult({});
+  if (result) {
+    st.result = result;
+    busy = false;
+    refresh();
+    gameOver(result);
+    return;
+  }
+  afterCommit();
+}
+
+// Tactics abilities: rook overwatch, bishop smoke grenade.
+async function doAbility(a, byHuman) {
+  const tok = gameToken;
+  busy = true;
+  abilityMode = null;
+  if (!replaying && history) history.events.push({ type: 'ability', a });
+  const p = st.board[a.from];
+  const g = groups.get(p.id);
+  if (a.kind === 'overwatch') {
+    sfx.click();
+    status(`${possessive(p.color)} rook is on overwatch: the first enemy to move into its line gets shot.`, 'warn');
+    await tween(0.5, (k) => (g.position.y = Math.sin(Math.PI * k) * 0.15));
+  } else {
+    const from = g.position.clone().setY(0.8);
+    const w = R.toWorld(a.to);
+    const to = new THREE.Vector3(w.x, 0.1, w.z);
+    const ball = new THREE.Mesh(new THREE.IcosahedronGeometry(0.07, 0), new THREE.MeshStandardMaterial({ color: 0x556b2f, flatShading: true }));
+    scene.add(ball);
+    await tween(0.55, (k) => {
+      ball.position.lerpVectors(from, to, k);
+      ball.position.y += Math.sin(Math.PI * k) * 1.2;
+    });
+    scene.remove(ball);
+    sfx.thud();
+    fx.dust(to, 10);
+    status(`Smoke! Shots through the cloud on ${R.sqName(a.to)} wobble far more.`, 'warn');
+  }
+  if (tok !== gameToken) return;
+  commit(R.applyRaw(st, a), { squares: new Set([a.from]), desc: a.kind === 'overwatch' ? `${playerName(p.color)} put a rook on overwatch.` : `${playerName(p.color)} threw smoke onto ${R.sqName(a.to)}.`, action: a, by: byHuman ? 'human' : 'ai' }, tok);
+}
+
 async function nextTurn() {
   const tok = gameToken;
   if (vsAI && st.turn !== human) {
@@ -833,7 +1187,8 @@ async function nextTurn() {
     const a = chooseAction(st, aiLevel);
     if (!a) return;
     if (a.kind === 'move') await doMove(a, false);
-    else await doShoot(a, R.aimCenter(st, a.to), aiLevel.aim);
+    else if (a.kind === 'shoot') await doShoot(a, R.aimCenter(st, a.to), aiLevel.aim);
+    else await doAbility(a, false);
     return;
   }
   if (!vsAI) {
@@ -885,6 +1240,16 @@ function showHandoff(opening = false) {
 function resumeGame() {
   showScreen(pendingTurn != null ? 'handoff' : 'game');
 }
+$('card-ability').addEventListener('click', () => {
+  if (busy || !humanTurn() || !st || !st.tactics) return;
+  const from = sqOfId(povId);
+  const ab = R.abilityActions(st, from)[0];
+  if (!ab) return;
+  if (ab.kind === 'overwatch') return doAbility(ab, true);
+  abilityMode = abilityMode === 'smoke' ? null : 'smoke';
+  if (abilityMode) status('Click a highlighted square to throw smoke there.', 'warn');
+  refresh();
+});
 $('btn-ready').addEventListener('click', () => {
   sfx.click();
   showScreen('game');
@@ -900,6 +1265,7 @@ function gameOver(result) {
   if (battle) {
     const k = battle.kind;
     if (k === 'puzzle') title = won === human ? 'Puzzle solved!' : 'Puzzle failed';
+    else if (PRACTICE.has(k)) title = won === human ? 'Puzzle solved!' : 'Not quite';
     else if (k === 'weekly') title = won === human ? 'Challenge won!' : 'Challenge lost';
     else if (k === 'gauntlet') title = won === human ? `Round ${battle.round + 1} cleared!` : 'Gauntlet over';
     else title = won === human ? 'Mission complete!' : 'Mission failed';
@@ -911,7 +1277,12 @@ function gameOver(result) {
   renderSummary(sum);
   renderBattleResult(sum && sum.campaignResult);
   renderChallengeResult(sum);
+  renderPuzzleResult(won === human);
   reportLeaderboardScore(result);
+  // Replays: whole game, plus the best shot if there was a good one.
+  bestShot = pickBestShot();
+  $('btn-replay').classList.toggle('hidden', !(history && history.events.length));
+  $('btn-bestshot').classList.toggle('hidden', !bestShot);
   const tok = gameToken;
   setTimeout(() => {
     if (tok === gameToken && screen === 'game') showScreen('over');
@@ -929,6 +1300,7 @@ let reportedGame = -1;
 let enemyMaterialShot = 0; // counted per shot, so enemy promotions can't hide your kills
 function reportLeaderboardScore(result) {
   if (!vsAI || battle || st.mode !== LEADERBOARD.mode || xpLevel !== LEADERBOARD.difficulty) return;
+  if (st.cover || st.weather || st.tactics) return; // variants change the game: not comparable
   if (reportedGame === gameToken) return; // exactly once per game
   reportedGame = gameToken;
   let score = 10 * enemyMaterialShot;
@@ -948,8 +1320,14 @@ function startGame(b = null) {
   tweens.length = 0;
   battle = b;
   if (b) {
-    st = R.fromPlacement(b.placement, b.mode);
+    st = b.state ? R.clone(b.state) : R.fromPlacement(b.placement, b.mode);
     if (b.rules) st.rules = { ...b.rules };
+    if (b.sure) st.rules = { ...R.rulesOf(st), spreadMul: 0 };
+    if (b.cover) st.cover = [...b.cover];
+    if (b.goal && b.goal.type === 'kill') {
+      const t = st.board[parseSq(b.goal.target)];
+      b.targetId = t ? t.id : -1;
+    }
     vsAI = true;
     human = 'w';
     const base = typeof b.ai === 'object' ? b.ai.base : b.ai;
@@ -964,7 +1342,23 @@ function startGame(b = null) {
     xpLevel = difficulty;
     aiLevel = { ...DIFFICULTIES[difficulty] };
     aiName = DIFFICULTIES[difficulty].label;
+    // Optional variants from the setup screen.
+    if (variants.cover) st.cover = R.makeCover();
+    const wx = R.makeWeather(variants.weather);
+    if (wx) st.weather = wx;
+    if (variants.tactics) st.tactics = true;
   }
+  // Arena lighting resets each game; rain darkens it.
+  showSkin('arena', findSkin('arena', progress.p.equipped.arena));
+  if (st.weather && st.weather.rain) {
+    world.hemi.intensity *= 0.65;
+    world.sun.intensity *= 0.5;
+  }
+  hintLevel = 0;
+  oddsPick = null;
+  abilityMode = null;
+  setScope(false);
+  history = { start: R.clone(st), events: [] };
   fogView = vsAI ? human : 'w';
   const baseFog = world.baseFog || { near: 18, far: 55 };
   scene.fog.near = st.mode === R.FOG ? 7 : baseFog.near;
@@ -983,9 +1377,21 @@ function startGame(b = null) {
   povId = null;
   viewMode = 'pov';
   started = true;
-  progress.beginGame({ vsAI, human, difficulty: xpLevel, mode: st.mode, campaign: b });
+  if (b && PRACTICE.has(b.kind)) progress.game = null; // practice: only the puzzle's own rewards
+  else progress.beginGame({ vsAI, human, difficulty: xpLevel, mode: st.mode, campaign: b });
   showScreen('game');
-  setPov(remembered[viewerColor()]);
+  if (b && b.kind === 'rush') viewMode = 'over';
+  setPov(remembered[viewerColor()], { stay: !!(b && b.kind === 'rush') });
+  if (b && b.puzzle && b.puzzle.pack === 'trick' && b.hint) {
+    // Trick shots are about aiming in first person: start in the shooter's eyes, facing the target.
+    const fs = parseSq(b.hint.from);
+    const ts = parseSq(b.hint.to);
+    setPov(st.board[fs].id);
+    const w = R.toWorld(fs);
+    const t = R.toWorld(ts);
+    yaw = faceYaw({ x: w.x, z: w.z }, t.x, t.z);
+    pitch = -0.05;
+  }
   const modeLine = { classic: 'Classic: siege the king', mercizero: 'MerciZero: shoot the king', fog: 'Fog of War: find the king' }[st.mode];
   if (!vsAI && handoffOn) {
     // Start with the device in White's hands.
@@ -993,7 +1399,11 @@ function startGame(b = null) {
     showHandoff(true);
     return;
   }
-  banner(b ? b.name : vsAI && human === 'b' ? 'You play Black' : modeLine, 1600);
+  if (b && b.kind === 'rush') {
+    banner(b.prompt, 900);
+    return;
+  }
+  banner(b ? (b.goal ? goalText(b.goal, st) : b.name) : vsAI && human === 'b' ? 'You play Black' : modeLine, b && b.goal ? 2600 : 1600);
   if (vsAI && human === 'b') nextTurn();
 }
 
@@ -1003,6 +1413,10 @@ let down = null;
 let dragging = false;
 canvas.addEventListener('pointerdown', (e) => {
   sfx.unlock();
+  if (e.button === 2) {
+    setScope(!scoped);
+    return;
+  }
   down = { x: e.clientX, y: e.clientY, id: e.pointerId };
   dragging = false;
   canvas.setPointerCapture(e.pointerId);
@@ -1037,6 +1451,7 @@ canvas.addEventListener('pointerup', (e) => {
   down = null;
   dragging = false;
   if (wasDrag) return;
+  if (scoped) return scopeFire();
   const h = pick(e.clientX, e.clientY);
   if (!h) return;
   const aim = viewMode === 'pov' && h.piece ? h.point : null;
@@ -1081,9 +1496,17 @@ window.addEventListener('keydown', (e) => {
   keys.add(e.key.toLowerCase());
   const k = e.key.toLowerCase();
   if (screen === 'title') return leaveTitle();
+  if (k === 'escape' && screen === 'game' && (scoped || abilityMode)) {
+    if (scoped) setScope(false);
+    if (abilityMode) {
+      abilityMode = null;
+      refresh();
+    }
+    return;
+  }
   if (k === 'escape') {
     // Close the topmost panel first.
-    for (const id of ['promo', 'help', 'settings', 'briefing', 'campaign', 'challenges', 'badges']) {
+    for (const id of ['promo', 'help', 'settings', 'briefing', 'campaign', 'challenges', 'editor', 'puzzles', 'badges']) {
       if (id === 'badges' && !$('shop').classList.contains('hidden')) return closeShop();
       if (id !== 'promo' && !$(id).classList.contains('hidden')) return closeOverlay(id);
     }
@@ -1098,6 +1521,8 @@ window.addEventListener('keydown', (e) => {
   if (k === 'v' || k === 'tab') {
     e.preventDefault();
     setOverview(viewMode !== 'over');
+  } else if (k === 'z') {
+    setScope(!scoped);
   } else if (k === 'q' || k === 'e') {
     cyclePiece(k === 'e' ? 1 : -1);
   }
@@ -1196,6 +1621,18 @@ $('btn-swap').addEventListener('click', () => {
   sfx.click();
   swapNames();
 });
+for (const [id, key] of [['v-cover', 'cover'], ['v-tactics', 'tactics']]) {
+  $(id).checked = variants[key];
+  $(id).addEventListener('change', () => {
+    variants[key] = $(id).checked;
+    savePref(`gunmate-v-${key}`, variants[key] ? '1' : '0');
+  });
+}
+$('v-weather').value = variants.weather;
+$('v-weather').addEventListener('change', () => {
+  variants.weather = $('v-weather').value;
+  savePref('gunmate-v-weather', variants.weather);
+});
 $('opt-handoff').addEventListener('change', () => {
   handoffOn = $('opt-handoff').checked;
   savePref('gunmate-handoff', handoffOn ? '1' : '0');
@@ -1239,10 +1676,22 @@ $('btn-to-title').addEventListener('click', () => showScreen('title'));
 $('btn-start').addEventListener('click', () => startGame());
 $('btn-setup-back').addEventListener('click', () => showScreen('main-menu'));
 $('btn-resume').addEventListener('click', resumeGame);
-$('btn-restart').addEventListener('click', () => startGame(battle));
+$('btn-restart').addEventListener('click', () => {
+  if (battle && battle.kind === 'rush') {
+    if (rush) rush.running = false;
+    return startRush();
+  }
+  startGame(battle);
+});
 $('btn-pause-howto').addEventListener('click', () => $('help').classList.remove('hidden'));
 $('btn-pause-settings').addEventListener('click', () => $('settings').classList.remove('hidden'));
-$('btn-quit').addEventListener('click', () => showScreen('main-menu'));
+$('btn-quit').addEventListener('click', () => {
+  if (rush && rush.running) {
+    rush.running = false;
+    $('rush-hud').classList.add('hidden');
+  }
+  showScreen('main-menu');
+});
 $('btn-menu').addEventListener('click', () => showScreen('pause'));
 $('btn-settings-close').addEventListener('click', () => closeOverlay('settings'));
 
@@ -1300,6 +1749,7 @@ $('btn-sound').addEventListener('click', () => {
   $('btn-sound').classList.toggle('off', sfx.muted);
 });
 $('btn-again').addEventListener('click', () => {
+  if (battle && battle.kind === 'rush') return startRush();
   if (!vsAI) swapNames(); // fair rematch: the other player gets White
   if (battle) return startGame(battle);
   startGame();
@@ -1716,6 +2166,9 @@ function openBriefing(b) {
 }
 function renderBattleResult(res) {
   $('ov-campaign').classList.toggle('hidden', !res);
+  delete $('btn-next-battle').dataset.next;
+  $('btn-next-battle').lastChild.textContent = 'Next battle';
+  $('ov-challenge').classList.add('hidden');
   const next = battle ? BATTLES[BATTLES.indexOf(battle) + 1] : null;
   $('btn-next-battle').classList.toggle('hidden', !(res && res.stars[0] && next && progress.battleUnlocked(next)));
   if (!res) return;
@@ -1739,6 +2192,12 @@ $('btn-br-play').addEventListener('click', () => {
   startGame(briefBattle);
 });
 $('btn-next-battle').addEventListener('click', () => {
+  const nx = $('btn-next-battle').dataset.next;
+  if (battle && battle.kind === 'library' && nx) {
+    const p = LIBRARY.find((x) => x.id === nx);
+    if (p) return startGame(puzzleToBattle(p));
+  }
+  if (battle && battle.kind === 'test') return openEditor();
   if (battle && battle.kind === 'gauntlet') {
     if (gauntletRun) startGame(gauntletBattle(gauntletRun.round, gauntletRun.lost));
     return;
@@ -1928,13 +2387,538 @@ applyTrack();
 progress.checkTitles();
 renderProfile();
 
+// --- Replays -----------------------------------------------------------------------------------
+
+let bestShot = null;
+let replayStop = false;
+let replayPaused = false;
+let replaySpeed = 1;
+let replayRestore = null;
+
+// The most impressive kill you made: long, unlikely, or a king/queen.
+function pickBestShot() {
+  if (!history) return null;
+  let best = null;
+  let top = 0;
+  for (const e of history.events) {
+    if (e.type !== 'shoot' || !e.mine || e.res.hit == null) continue;
+    const v = e.snap.board[e.res.hit];
+    const sh = e.snap.board[e.a.from];
+    if (!v || !sh || v.color === sh.color || (v.type === 'k' && e.snap.mode === R.CLASSIC)) continue;
+    const dist = Math.max(Math.abs(R.fileOf(e.res.hit) - R.fileOf(e.a.from)), Math.abs(R.rankOf(e.res.hit) - R.rankOf(e.a.from)));
+    const score = dist + (1 - e.chance) * 4 + (v.type === 'k' ? 4 : R.VALUE[v.type] / 3);
+    if (score > top) {
+      top = score;
+      best = e;
+    }
+  }
+  return best;
+}
+
+async function runReplay(events, startState, clip = false) {
+  replayRestore = { st, last, graves: JSON.parse(JSON.stringify(graves)), povId };
+  replaying = true;
+  replayStop = false;
+  replayPaused = false;
+  const tok = ++gameToken;
+  tweens.length = 0;
+  st = R.clone(startState);
+  graves = { w: [], b: [] };
+  renderGraves();
+  last = null;
+  placeAll();
+  showScreen('game');
+  $('replay-bar').classList.remove('hidden');
+  $('replay-pause').textContent = '⏸';
+  if (!clip) {
+    viewMode = 'over';
+  } else {
+    // Look through the shooter, then the kill-cam takes over.
+    povId = st.board[events[0].a.from].id;
+    viewMode = 'pov';
+    const w = R.toWorld(events[0].a.from);
+    const t = R.toWorld(events[0].a.to);
+    yaw = faceYaw({ x: w.x, z: w.z }, t.x, t.z);
+    pitch = POV_PITCH;
+    setViewGun();
+  }
+  startTransition();
+  refresh();
+  await wait(clip ? 700 : 500);
+  for (let i = 0; i < events.length; i++) {
+    if (replayStop || tok !== gameToken) break;
+    while (replayPaused && !replayStop) await wait(100);
+    $('replay-step').textContent = clip ? 'Best shot' : `Action ${i + 1} of ${events.length}`;
+    const e = events[i];
+    if (e.type === 'move') await doMove(e.a, false);
+    else if (e.type === 'shoot') await doShoot(e.a, e.aim, 1, false, { forced: e.res, chance: e.chance, killcam: clip });
+    else if (e.type === 'ability') await doAbility(e.a, false);
+    else if (e.type === 'ow') await fireOverwatch(e.from, e.to, gameToken, e.res);
+    await wait(clip ? 1100 : 450 / replaySpeed);
+  }
+  if (tok === gameToken) endReplay();
+}
+function endReplay() {
+  if (!replaying) return;
+  replaying = false;
+  killcam = null;
+  gameToken++;
+  const r = replayRestore;
+  st = r.st;
+  last = r.last;
+  graves = r.graves;
+  renderGraves();
+  placeAll();
+  povId = r.povId;
+  viewMode = 'over';
+  startTransition();
+  busy = false;
+  $('replay-bar').classList.add('hidden');
+  refresh();
+  showScreen('over');
+}
+$('btn-replay').addEventListener('click', () => history && runReplay(history.events, history.start));
+$('btn-bestshot').addEventListener('click', () => bestShot && runReplay([bestShot], bestShot.snap, true));
+$('replay-pause').addEventListener('click', () => {
+  replayPaused = !replayPaused;
+  $('replay-pause').textContent = replayPaused ? '▶' : '⏸';
+});
+$('replay-speed').addEventListener('click', () => {
+  replaySpeed = replaySpeed === 1 ? 2 : replaySpeed === 2 ? 4 : 1;
+  $('replay-speed').textContent = `${replaySpeed}×`;
+});
+$('replay-stop').addEventListener('click', () => {
+  replayStop = true;
+  replayPaused = false;
+});
+
+// --- Puzzle Rush ---------------------------------------------------------------------------------
+
+const RUSH_TIME = 180;
+let rush = null; // { left, score, strikes, running, current, lastOk }
+const RUSH_VALUE = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 100 };
+
+function startRush() {
+  rush = { left: RUSH_TIME, score: 0, strikes: 0, running: true };
+  $('rush-hud').classList.remove('hidden');
+  nextRushPuzzle();
+}
+function nextRushPuzzle() {
+  const kind = rush.score >= 3 && Math.random() < 0.5 ? 'best' : 'drill';
+  let r = null;
+  while (!r) r = kind === 'best' ? genBestTarget(Math.random) : genDrill(Math.random);
+  rush.current = { kind, r };
+  const prompt = kind === 'best' ? 'Shoot the most valuable piece you can' : 'Shoot the king';
+  startGame({ kind: 'rush', id: 'rush', name: 'Puzzle Rush', foe: 'Rush', mode: r.st.mode, ai: 'easy', state: r.st, sure: true, prompt });
+  updateRushHud();
+}
+function rushPick(a, aim) {
+  const c = rush.current;
+  let ok = a.kind === 'shoot';
+  if (ok && c.kind === 'drill') ok = a.to === R.findKing(st, 'b');
+  if (ok && c.kind === 'best') ok = RUSH_VALUE[st.board[a.to].type] === RUSH_VALUE[st.board[c.r.target].type];
+  rush.lastOk = ok;
+  rush.lastSolution = { piece: R.NAMES[st.board[c.r.solution.from].type].toLowerCase(), from: c.r.solution.from, to: c.r.solution.to };
+  if (a.kind === 'shoot') doShoot(a, aim || R.aimCenter(st, a.to), 1, false);
+  else doMove(a, false);
+}
+function rushAfter() {
+  if (!rush || !rush.running) return;
+  if (rush.lastOk) {
+    rush.score++;
+    status(`Correct! ${rush.score} solved.`, 'good');
+  } else {
+    rush.strikes++;
+    sfx.check();
+    const sol = rush.lastSolution;
+    status(`Wrong: it was the ${sol.piece} on ${R.sqName(sol.from)} → ${R.sqName(sol.to)}.`, 'bad');
+  }
+  updateRushHud();
+  if (rush.strikes >= 3) return endRush('three strikes');
+  const go = () => {
+    if (!rush || !rush.running) return;
+    if (paused) return setTimeout(go, 200);
+    nextRushPuzzle();
+  };
+  setTimeout(go, rush.lastOk ? 450 : 1400);
+}
+function updateRushHud() {
+  if (!rush) return;
+  const t = Math.max(0, Math.ceil(rush.left));
+  $('rush-hud').innerHTML = `<span class="r-time ${t <= 20 ? 'low' : ''}">⏱ ${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}</span><span class="r-score">★ ${rush.score}</span><span class="r-strikes">${'✖'.repeat(rush.strikes)}${'○'.repeat(3 - rush.strikes)}</span>`;
+}
+function endRush(reason) {
+  if (!rush || !rush.running) return;
+  rush.running = false;
+  const score = rush.score;
+  const r = progress.recordRush(score);
+  $('rush-hud').classList.add('hidden');
+  if (st) st.result = { winner: null, reason };
+  busy = false;
+  gameToken++;
+  $('over-title').textContent = 'Rush over';
+  $('over-reason').textContent = `${reason[0].toUpperCase() + reason.slice(1)}.`;
+  renderSummary(null);
+  renderBattleResult(null);
+  $('ov-challenge').innerHTML = `Score <b>${score}</b>${r.best ? ' · new best!' : ` · best ${progress.p.rush.best}`}${score ? ` · +${score * 10} XP` : ''}`;
+  $('ov-challenge').classList.remove('hidden');
+  $('btn-replay').classList.add('hidden');
+  $('btn-bestshot').classList.add('hidden');
+  sfx.fanfare(score > 0);
+  showScreen('over');
+}
+
+// --- Puzzles screen -----------------------------------------------------------------------------
+
+function renderPuzzles() {
+  const lib = progress.p.lib;
+  const total = LIBRARY.length * 3;
+  $('pz-stars').textContent = progress.libStars;
+  $('pz-total').textContent = total;
+  const wk = weekKey();
+  const wp = weeklyPuzzle(wk);
+  const wDone = progress.p.wpuzzle === wk;
+  $('pz-weekly').innerHTML = `<div class="ch-top"><span class="ch-kicker">Puzzle of the week</span><span class="ch-time">${untilWeekEnd()} left</span></div>
+    <b class="ch-name">${goalText(wp.goal)}</b><p>A hard two-mover: sure-shot, and the enemy defends perfectly.</p>
+    <div class="ch-reward">${wDone ? '✓ Solved this week' : `+${WEEKLY_PUZZLE_XP} XP`}</div><button class="primary" data-pz="weekly">Solve</button>`;
+  $('pz-rush').innerHTML = `<div class="ch-top"><span class="ch-kicker">Puzzle Rush</span><span class="ch-time">Best ${progress.p.rush.best}</span></div>
+    <b class="ch-name">3 minutes, 3 strikes</b><p>Quick sure-shot puzzles, one after another. Find the shot fast.</p>
+    <div class="ch-reward">+10 XP per puzzle solved</div><button class="primary" data-pz="rush">Start</button>`;
+  $('pz-editor').innerHTML = `<div class="ch-top"><span class="ch-kicker">Puzzle editor</span></div>
+    <b class="ch-name">Make your own</b><p>Set up a position, pick a goal, test it, and share it as a code.</p>
+    <button class="primary" data-pz="editor">Open editor</button>`;
+  $('pz-packs').innerHTML = PACKS.map((pk) => {
+    const list = LIBRARY.filter((p) => p.pack === pk.id);
+    const got = list.reduce((a, p) => a + ((lib[p.id] && lib[p.id].stars) || 0), 0);
+    const tiles = list
+      .map((p, i) => {
+        const n = (lib[p.id] && lib[p.id].stars) || 0;
+        return `<button class="pz-tile ${n ? 'done' : ''}" data-lib="${p.id}" title="${goalText(p.goal)}"><b>${i + 1}</b><span>${'★'.repeat(n)}${'☆'.repeat(3 - n)}</span></button>`;
+      })
+      .join('');
+    return `<section class="pz-pack"><div class="pz-head"><span class="pz-icon">${pk.icon}</span><div><b>${pk.name}</b><span>${pk.blurb}</span></div><span class="pz-count">★ ${got}/${list.length * 3}</span></div><div class="pz-tiles">${tiles}</div></section>`;
+  }).join('');
+}
+$('btn-puzzles').addEventListener('click', () => {
+  sfx.click();
+  renderPuzzles();
+  $('pz-code-err').textContent = '';
+  $('puzzles').classList.remove('hidden');
+});
+$('btn-puzzles-close').addEventListener('click', () => closeOverlay('puzzles'));
+$('puzzles').addEventListener('click', (e) => {
+  const t = e.target.closest('[data-lib],[data-pz]');
+  if (!t) return;
+  if (t.dataset.lib) {
+    closeOverlay('puzzles');
+    return startGame(puzzleToBattle(LIBRARY.find((p) => p.id === t.dataset.lib)));
+  }
+  const what = t.dataset.pz;
+  if (what === 'weekly') {
+    closeOverlay('puzzles');
+    return startGame(puzzleToBattle(weeklyPuzzle(weekKey()), 'wpuzzle'));
+  }
+  if (what === 'rush') {
+    closeOverlay('puzzles');
+    return startRush();
+  }
+  if (what === 'editor') return openEditor();
+  if (what === 'code') {
+    try {
+      const p = decodePuzzle($('pz-code').value);
+      closeOverlay('puzzles');
+      startGame(puzzleToBattle(p, 'code'));
+    } catch (err) {
+      $('pz-code-err').textContent = err.message;
+    }
+  }
+});
+
+// --- Puzzle editor ------------------------------------------------------------------------------
+
+const ed = { board: new Array(64).fill(null), cover: new Set(), target: -1, tool: 'wq' };
+const ED_TOOLS = ['wk', 'wq', 'wr', 'wb', 'wn', 'wp', 'bk', 'bq', 'br', 'bb', 'bn', 'bp', 'crate', 'target', 'erase'];
+function edStandard() {
+  ed.board = new Array(64).fill(null);
+  const back = 'rnbqkbnr';
+  for (let f = 0; f < 8; f++) {
+    ed.board[R.sqAt(f, 0)] = { color: 'w', type: back[f] };
+    ed.board[R.sqAt(f, 1)] = { color: 'w', type: 'p' };
+    ed.board[R.sqAt(f, 6)] = { color: 'b', type: 'p' };
+    ed.board[R.sqAt(f, 7)] = { color: 'b', type: back[f] };
+  }
+  ed.cover.clear();
+  ed.target = -1;
+}
+function edPlacement() {
+  const rows = [];
+  for (let r = 7; r >= 0; r--) {
+    let row = '';
+    let gap = 0;
+    for (let f = 0; f < 8; f++) {
+      const p = ed.board[R.sqAt(f, r)];
+      if (!p) {
+        gap++;
+        continue;
+      }
+      if (gap) row += gap;
+      gap = 0;
+      row += p.color === 'w' ? p.type.toUpperCase() : p.type;
+    }
+    rows.push(row + (gap ? gap : ''));
+  }
+  return rows.join('/');
+}
+function edPuzzle() {
+  const goal = { type: $('ed-goal').value, n: Math.max(1, Math.min(30, +$('ed-n').value || 1)) };
+  if (goal.type === 'kill') goal.target = ed.target >= 0 ? R.sqName(ed.target) : '';
+  return { id: 'test', pack: null, placement: edPlacement(), mode: $('ed-mode').value, sure: $('ed-sure').checked, cover: [...ed.cover].map(R.sqName), goal, ai: $('ed-ai').value, title: $('ed-title').value.trim().slice(0, 40) || 'Custom puzzle' };
+}
+function edLoad(p) {
+  const s0 = R.fromPlacement(p.placement, p.mode);
+  ed.board = s0.board.map((x) => (x ? { color: x.color, type: x.type } : null));
+  ed.cover = new Set((p.cover || []).map(parseSq));
+  ed.target = p.goal.type === 'kill' && p.goal.target ? parseSq(p.goal.target) : -1;
+  $('ed-mode').value = p.mode;
+  $('ed-goal').value = p.goal.type;
+  $('ed-n').value = p.goal.n;
+  $('ed-ai').value = p.ai;
+  $('ed-sure').checked = !!p.sure;
+  $('ed-title').value = p.title || '';
+}
+function edCheck() {
+  const kings = { w: 0, b: 0 };
+  for (const p of ed.board) if (p && p.type === 'k') kings[p.color]++;
+  if (kings.w !== 1 || kings.b !== 1) return 'Each side needs exactly one king.';
+  if ($('ed-goal').value === 'kill' && !(ed.target >= 0 && ed.board[ed.target] && ed.board[ed.target].color === 'b')) return 'Pick a target: choose the 🎯 tool and click a black piece.';
+  for (let f = 0; f < 8; f++) for (const r of [0, 7]) {
+    const p = ed.board[R.sqAt(f, r)];
+    if (p && p.type === 'p') return 'Pawns can’t stand on the first or last rank.';
+  }
+  return '';
+}
+function renderEditor() {
+  $('ed-board').innerHTML = Array.from({ length: 64 }, (_, i) => {
+    const f = i % 8;
+    const r = 7 - Math.floor(i / 8);
+    const s = R.sqAt(f, r);
+    const p = ed.board[s];
+    const light = (f + r) % 2 === 1;
+    const inner = ed.cover.has(s) ? '<span class="ed-crate">📦</span>' : p ? pieceIcon(p.type, p.color) : '';
+    return `<button class="ed-sq ${light ? 'l' : 'd'} ${s === ed.target ? 'target' : ''}" data-sq="${s}" title="${R.sqName(s)}">${inner}</button>`;
+  }).join('');
+  $('ed-palette').innerHTML = ED_TOOLS.map((t) => {
+    const label = t === 'crate' ? '📦' : t === 'target' ? '🎯' : t === 'erase' ? '⌫' : pieceIcon(t[1], t[0]);
+    return `<button class="ed-tool ${ed.tool === t ? 'on' : ''}" data-tool="${t}" title="${t === 'crate' ? 'Crate' : t === 'target' ? 'Target (for “kill” goals)' : t === 'erase' ? 'Erase' : (t[0] === 'w' ? 'White ' : 'Black ') + R.NAMES[t[1]].toLowerCase()}">${label}</button>`;
+  }).join('');
+  $('ed-n-row').classList.toggle('hidden', false);
+  $('ed-err').textContent = edCheck();
+}
+function openEditor() {
+  closeOverlay('puzzles');
+  if (!ed.board.some(Boolean)) edStandard();
+  renderEditor();
+  showScreen('main-menu');
+  $('editor').classList.remove('hidden');
+}
+$('ed-board').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-sq]');
+  if (!b) return;
+  const s = +b.dataset.sq;
+  const t = ed.tool;
+  if (t === 'erase') {
+    ed.board[s] = null;
+    ed.cover.delete(s);
+    if (ed.target === s) ed.target = -1;
+  } else if (t === 'crate') {
+    if (ed.cover.has(s)) ed.cover.delete(s);
+    else {
+      ed.cover.add(s);
+      ed.board[s] = null;
+      if (ed.target === s) ed.target = -1;
+    }
+  } else if (t === 'target') {
+    if (ed.board[s] && ed.board[s].color === 'b') ed.target = ed.target === s ? -1 : s;
+  } else {
+    const color = t[0];
+    const type = t[1];
+    if (type === 'k') for (let q = 0; q < 64; q++) if (ed.board[q] && ed.board[q].type === 'k' && ed.board[q].color === color) ed.board[q] = null;
+    ed.board[s] = { color, type };
+    ed.cover.delete(s);
+  }
+  sfx.click();
+  renderEditor();
+});
+$('ed-palette').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-tool]');
+  if (!b) return;
+  ed.tool = b.dataset.tool;
+  renderEditor();
+});
+for (const id of ['ed-goal', 'ed-mode', 'ed-n']) $(id).addEventListener('change', renderEditor);
+$('ed-clear').addEventListener('click', () => {
+  ed.board = new Array(64).fill(null);
+  ed.cover.clear();
+  ed.target = -1;
+  renderEditor();
+});
+$('ed-standard').addEventListener('click', () => {
+  edStandard();
+  renderEditor();
+});
+$('ed-test').addEventListener('click', () => {
+  const err = edCheck();
+  if (err) return ($('ed-err').textContent = err);
+  progress.unlock('architect');
+  closeOverlay('editor');
+  startGame(puzzleToBattle(edPuzzle(), 'test'));
+});
+$('ed-copy').addEventListener('click', async () => {
+  const err = edCheck();
+  if (err) return ($('ed-err').textContent = err);
+  const code = encodePuzzle(edPuzzle());
+  $('ed-code').value = code;
+  $('ed-code').select();
+  try {
+    await navigator.clipboard.writeText(code);
+    $('ed-err').textContent = 'Code copied. Friends can paste it in Puzzles → Play a code.';
+  } catch {
+    $('ed-err').textContent = 'Copy the code above and send it to a friend.';
+  }
+});
+$('ed-load').addEventListener('click', () => {
+  try {
+    edLoad(decodePuzzle($('ed-code').value));
+    renderEditor();
+  } catch (err) {
+    $('ed-err').textContent = err.message;
+  }
+});
+$('ed-close').addEventListener('click', () => closeOverlay('editor'));
+for (const id of ['ed-title', 'ed-code']) $(id).addEventListener('keydown', (e) => e.stopPropagation());
+
+// --- Hints --------------------------------------------------------------------------------------
+
+function updateHintButton() {
+  const can = !!(battle && battle.hint && PRACTICE.has(battle.kind) && battle.kind !== 'rush' && st && !st.result && !replaying);
+  $('btn-hint').classList.toggle('hidden', !can);
+  if (can) $('btn-hint').title = hintLevel >= 2 ? 'Hint fully shown' : `Hint (${HINT_COST} XP): ${hintLevel ? 'show the square' : 'show the piece'}`;
+}
+$('btn-hint').addEventListener('click', () => {
+  if (!battle || !battle.hint || hintLevel >= 2) return;
+  if (!progress.spendXp(HINT_COST)) return status(`A hint costs ${HINT_COST} XP. You have ${progress.balance}.`, 'warn');
+  hintLevel++;
+  const trick = battle.puzzle && battle.puzzle.aim;
+  status(hintLevel === 1 ? `Hint: use the highlighted piece (−${HINT_COST} XP).` : trick ? `Hint: click exactly on the gold dot (−${HINT_COST} XP).` : `Hint: aim for the gold marker (−${HINT_COST} XP).`, 'warn');
+  refresh();
+});
+
+// --- Sniper scope -------------------------------------------------------------------------------
+
+let breath = 1; // 0..1, drains while you hold Shift
+let swayY = 0;
+let swayP = 0;
+let scopeTimer = 0;
+function canScope() {
+  return !!(st && started && viewMode === 'pov' && humanTurn() && !busy && !replaying && !(battle && battle.kind === 'rush'));
+}
+function setScope(on) {
+  scoped = !!on && canScope();
+  $('scope').classList.toggle('hidden', !scoped);
+  $('btn-scope').classList.toggle('on', scoped);
+  if (!scoped) {
+    swayY = 0;
+    swayP = 0;
+  }
+}
+function scopeFire() {
+  const r = canvas.getBoundingClientRect();
+  const h = pick(r.left + r.width / 2, r.top + r.height / 2);
+  if (!h || !h.piece || !current.targets.includes(h.sq)) return status('No target in your sights.', 'warn');
+  const from = sqOfId(povId);
+  const sh = R.legalActions(st, from).find((a) => a.kind === 'shoot' && a.to === h.sq);
+  if (!sh) return;
+  setScope(false);
+  if (battle && battle.goal && battle.goal.type === 'odds') oddsPick = gradeOdds(from, h.sq, h.point);
+  doShoot(sh, h.point, SCOPE_SPREAD, true);
+}
+const SCOPE_SPREAD = 0.6; // steadier than hip fire
+$('btn-scope').addEventListener('click', () => setScope(!scoped));
+canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+function updateScope(dt, time) {
+  if (scoped && !canScope()) setScope(false);
+  if (!scoped) {
+    breath = Math.min(1, breath + dt * 0.3);
+    return;
+  }
+  const holding = keys.has('shift') && breath > 0;
+  if (holding) breath = Math.max(0, breath - dt * 0.45);
+  else breath = Math.min(1, breath + dt * 0.25);
+  const amp = holding ? 0.2 : keys.has('shift') ? 1.6 : 1;
+  swayY = amp * 0.012 * (Math.sin(time * 0.7) + 0.5 * Math.sin(time * 1.9));
+  swayP = amp * 0.009 * (Math.sin(time * 0.9 + 1) + 0.5 * Math.sin(time * 2.3));
+  scopeTimer -= dt;
+  if (scopeTimer <= 0) {
+    scopeTimer = 0.15;
+    const r = canvas.getBoundingClientRect();
+    const h = pick(r.left + r.width / 2, r.top + r.height / 2);
+    const tgt = h && h.piece && current.targets.includes(h.sq);
+    $('scope-chance').textContent = tgt ? `${Math.round(R.hitChance(st, sqOfId(povId), h.sq, h.point, 120, SCOPE_SPREAD) * 100)}%` : '';
+    $('scope').classList.toggle('on-target', !!tgt);
+    $('scope').style.setProperty('--breath', breath.toFixed(2));
+  }
+}
+
+// --- Weather visuals: rain and a wind indicator ---------------------------------------------------
+
+const RAIN_N = 1400;
+const rainPos = new Float32Array(RAIN_N * 6);
+const rainGeo = new THREE.BufferGeometry();
+rainGeo.setAttribute('position', new THREE.BufferAttribute(rainPos, 3));
+const rain = new THREE.LineSegments(rainGeo, new THREE.LineBasicMaterial({ color: 0xaab8cc, transparent: true, opacity: 0.55 }));
+rain.frustumCulled = false;
+rain.visible = false;
+scene.add(rain);
+for (let i = 0; i < RAIN_N; i++) {
+  const x = (Math.random() - 0.5) * 22;
+  const z = (Math.random() - 0.5) * 22;
+  const y = Math.random() * 12;
+  rainPos.set([x, y, z, x, y - 0.35, z], i * 6);
+}
+function updateWeather(dt) {
+  const wx = st && started && screen !== 'main-menu' ? st.weather : null;
+  rain.visible = !!(wx && wx.rain);
+  if (rain.visible) {
+    for (let i = 0; i < RAIN_N; i++) {
+      const o = i * 6;
+      let y = rainPos[o + 1] - dt * 14;
+      if (y < -0.2) y += 12;
+      rainPos[o + 1] = y;
+      rainPos[o + 4] = y - 0.35;
+    }
+    rainGeo.attributes.position.needsUpdate = true;
+  }
+  const wind = wx && wx.wind;
+  $('wind-hud').classList.toggle('hidden', !wind);
+  if (wind) {
+    const f = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+    const fl = Math.hypot(f.x, f.z) || 1;
+    const fx = f.x / fl;
+    const fz = f.z / fl;
+    const rel = Math.atan2(wind.x * -fz + wind.z * fx, wind.x * fx + wind.z * fz);
+    $('wind-arrow').style.transform = `rotate(${rel}rad)`;
+    $('wind-speed').textContent = `${wx.kph} km/h`;
+  }
+}
+
 // --- Main loop -----------------------------------------------------------------------------
 
 const clock = new THREE.Clock();
 let mapTimer = 0;
 function frame() {
   requestAnimationFrame(frame);
-  const dt = Math.min(clock.getDelta(), 0.05);
+  const rawDt = clock.getDelta();
+  const dt = Math.min(rawDt, 0.05);
   const time = clock.elapsedTime;
 
   for (let i = tweens.length - 1; i >= 0; i--) {
@@ -1956,7 +2940,7 @@ function frame() {
   if (!started) ovYaw += dt * 0.08;
 
   // Camera.
-  const targetFov = viewMode === 'pov' ? fov : 50;
+  const targetFov = scoped ? 18 : viewMode === 'pov' ? fov : 50;
   camera.fov += (targetFov - camera.fov) * Math.min(1, dt * 10);
   camera.updateProjectionMatrix();
   desiredPose(_pos, _quat);
@@ -1991,6 +2975,18 @@ function frame() {
   ringMat.color.setHSL(0.01, 1, 0.5 + Math.sin(time * 6) * 0.1);
 
   fx.update(dt);
+  updateScope(dt, time);
+  updateWeather(dt);
+  if (rush && rush.running && screen === 'game' && !paused) {
+    const before = Math.ceil(rush.left);
+    rush.left -= Math.min(rawDt, 1); // real time, so slow devices don't get extra time
+    if (Math.ceil(rush.left) !== before) updateRushHud();
+    if (rush.left <= 0) endRush('time up');
+  }
+  for (const m of smokeRoot.children) {
+    m.rotation.y += dt * 0.3;
+    m.position.y += Math.sin(clock.elapsedTime * 0.8 + m.userData.seed) * dt * 0.05;
+  }
   if (needRebuild && tweens.length === 0) rebuildPieces();
 
   // Minimap view cone follows the camera.
@@ -2002,7 +2998,7 @@ function frame() {
 
   renderer.clear();
   renderer.render(scene, camera);
-  if (viewGun && viewMode === 'pov' && blend > 0.8 && !killcam) {
+  if (viewGun && viewMode === 'pov' && blend > 0.8 && !killcam && !scoped) {
     viewKick = Math.max(0, viewKick - dt * 6);
     const bob = Math.sin(time * 1.6) * 0.004;
     viewGun.position.set(0.17, -0.15 + bob - viewKick * 0.012, -0.36 + viewKick * 0.06);
@@ -2016,7 +3012,7 @@ function frame() {
 }
 
 // Read-only hook for automated play-testing.
-window.__gunmate = { state: () => st, legal: () => (st ? R.legalActions(st) : []), busy: () => busy, music: sfx.music, progress: () => progress, start: (b) => startGame({ kind: 'test', name: 'Test', foe: 'Test', ai: 'easy', mode: R.MERCIZERO, ...b }), killcam: () => !!killcam, fog: () => ({ hidden: [...fogHidden], hiddenGroups: [...groups.values()].filter((g) => !g.visible).length }), tile: (i) => { const m = tiles[i].material; return { c: m.color.getHexString(), e: m.emissive.getHexString(), ei: m.emissiveIntensity, r: m.roughness }; }, cam: () => ({ pos: camera.position.toArray().map((v) => +v.toFixed(2)), povId, viewMode, yaw: +yaw.toFixed(2), pitch: +pitch.toFixed(2) }) };
+window.__gunmate = { state: () => st, legal: () => (st ? R.legalActions(st) : []), busy: () => busy, music: sfx.music, progress: () => progress, start: (b) => startGame({ kind: 'test', name: 'Test', foe: 'Test', ai: 'easy', mode: R.MERCIZERO, ...b }), killcam: () => !!killcam, project: (x, y, z) => { const v = new THREE.Vector3(x, y, z).project(camera); const r = canvas.getBoundingClientRect(); return { x: r.left + ((v.x + 1) / 2) * r.width, y: r.top + ((1 - v.y) / 2) * r.height }; }, battle: () => battle, fog: () => ({ hidden: [...fogHidden], hiddenGroups: [...groups.values()].filter((g) => !g.visible).length }), tile: (i) => { const m = tiles[i].material; return { c: m.color.getHexString(), e: m.emissive.getHexString(), ei: m.emissiveIntensity, r: m.roughness }; }, cam: () => ({ pos: camera.position.toArray().map((v) => +v.toFixed(2)), povId, viewMode, yaw: +yaw.toFixed(2), pitch: +pitch.toFixed(2) }) };
 
 // Show the board (slowly orbiting) behind the menu.
 st = R.newGame(R.CLASSIC);

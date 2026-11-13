@@ -200,3 +200,64 @@ for (const mode of [R.CLASSIC, R.MERCIZERO]) {
   pr.setTitle('prestigious');
   ok(pr.titleName === 'The Prestigious' && (pr.setTitle('legend'), pr.p.title === 'prestigious'), 'can only wear unlocked titles');
 }
+
+// Variants, abilities, puzzles
+{
+  const G = await import('../chess-shooter/src/puzzlegen.js');
+  const PZ = await import('../chess-shooter/src/puzzles.js');
+  // Cover crates
+  let g = { ...R.newGame(R.MERCIZERO), board: new Array(64).fill(null), cover: [at('a3')] };
+  g.board[at('a1')] = { id: 1, type: 'r', color: 'w' }; g.board[at('a4')] = { id: 2, type: 'p', color: 'b' };
+  g.board[at('e1')] = { id: 3, type: 'k', color: 'w' }; g.board[at('e8')] = { id: 4, type: 'k', color: 'b' };
+  ok(!R.isTargetable(g, at('a1'), at('a4')) && !R.pseudoMoves(g, at('a1')).some((m) => m.to === at('a3') || m.to === at('a4')), 'a crate blocks the rook’s line and its moves');
+  const g2 = { ...g, cover: [] };
+  ok(R.isTargetable(g2, at('a1'), at('a4')), 'without the crate the shot is on');
+  const blocked = R.simulateShot({ ...g2, cover: [at('a3')] }, at('a1'), R.aimCenter(g2, at('a4')), R.mulberry(1), 0.01);
+  ok(blocked.hit == null && blocked.cover === at('a3'), 'bullets stop at crates');
+  // Smoke and wind
+  const base = R.hitChance(g2, at('a1'), at('a4'));
+  const smoked = R.hitChance({ ...g2, smoke: [{ sq: at('a3'), until: 99 }] }, at('a1'), at('a4'));
+  const windy = R.hitChance({ ...g2, weather: { wind: { x: 0.07, z: 0 }, kph: 42 } }, at('a1'), at('a4'));
+  ok(smoked < base - 0.15 && windy < base - 0.15, `smoke and crosswind lower the odds (${(base * 100) | 0}% → smoke ${(smoked * 100) | 0}%, wind ${(windy * 100) | 0}%)`);
+  // Abilities
+  let t = { ...R.newGame(R.MERCIZERO), tactics: true };
+  t.board[at('a2')] = null; t.board[at('a7')] = null;
+  const acts = R.legalActions(t);
+  ok(acts.some((a) => a.kind === 'overwatch' && a.from === at('a1')) && acts.some((a) => a.kind === 'smoke'), 'tactics adds overwatch and smoke actions');
+  t = R.applyRaw(t, { kind: 'overwatch', from: at('a1'), to: at('a1') });
+  ok(!R.legalActions(R.applyRaw(t, R.legalActions(t)[0])).some((a) => a.kind === 'overwatch' && a.from === at('a1')), 'overwatch is once per game');
+  ok(R.overwatchShooter(R.applyRaw(t, { kind: 'move', from: at('b7'), to: at('b5') }), 'w', at('b5')) === -1, 'overwatch ignores moves outside its line');
+  const tw = { ...t, board: t.board.map((p) => p && { ...p }) };
+  tw.board[at('a5')] = { id: 99, type: 'n', color: 'b', moved: true };
+  ok(R.overwatchShooter(tw, 'w', at('a5')) === at('a1'), 'overwatch fires on a piece that moves into its line');
+  const afterBlack = R.applyRaw(tw, { kind: 'move', from: at('h7'), to: at('h6') });
+  ok(afterBlack.overwatch.w && R.applyRaw(afterBlack, { kind: 'move', from: at('b2'), to: at('b3') }).overwatch.w === null, 'overwatch lasts through the enemy turn, ends when its owner acts again');
+  // Puzzle library: every generated puzzle still checks out
+  const sqOf = (n) => R.sqAt('abcdefgh'.indexOf(n[0]), +n[1] - 1);
+  let bad = [];
+  for (const p of PZ.LIBRARY.filter((x) => x.pack !== 'fog')) {
+    const st = G.makeState(p.placement, p.mode, p.sure);
+    if (p.cover) st.cover = p.cover.map(sqOf);
+    if (p.pack === 'basic' && !G.kingShotNow(st)) bad.push(p.id);
+    if (p.pack === 'two' && !G.forcedKingIn2(st)) bad.push(p.id);
+    if (p.pack === 'trick') {
+      const w = G.aimWindow(st, sqOf(p.hint.from), sqOf(p.hint.to));
+      if (!(w.frac > 0) || R.simulateShot(st, sqOf(p.hint.from), R.aimCenter(st, sqOf(p.hint.to)), Math.random, 1).hit === sqOf(p.hint.to)) bad.push(p.id);
+    }
+    if (p.pack === 'survive' && !G.survivalSolution(st, 2).good) bad.push(p.id);
+    if (p.pack === 'rescue' && !G.forcedPromotionIn2(st)) bad.push(p.id);
+  }
+  ok(bad.length === 0 && PZ.LIBRARY.length === 40, `all ${PZ.LIBRARY.length} library puzzles verified by the solver ${bad.join(',')}`);
+  for (const p of PZ.WEEKLY_POOL) if (!G.forcedKingIn2(G.makeState(p.placement, p.mode, true))) bad.push(p.id);
+  ok(bad.length === 0, 'puzzle-of-the-week pool verified');
+  // Rush generators are quick
+  const t0 = Date.now(); for (let i = 0; i < 20; i++) { G.genDrill(Math.random); G.genBestTarget(Math.random); }
+  ok(Date.now() - t0 < 4000, `Puzzle Rush generates 40 puzzles in ${Date.now() - t0}ms`);
+  // Share codes
+  const code = PZ.encodePuzzle({ placement: '4k3/8/8/8/8/8/8/R3K3', mode: R.MERCIZERO, sure: true, cover: ['d4'], goal: { type: 'king', n: 3 }, ai: 'hard', title: 'Tëst ♞' });
+  const back = PZ.decodePuzzle(code);
+  ok(back.placement === '4k3/8/8/8/8/8/8/R3K3' && back.cover[0] === 'd4' && back.goal.n === 3 && back.title === 'Tëst ♞', 'puzzle codes round-trip ' + code);
+  let errs = 0;
+  for (const badCode of ['hello', 'GM1-!!!', PZ.encodePuzzle({ placement: '8/8/8/8/8/8/8/R7', mode: R.MERCIZERO, goal: { type: 'king', n: 2 }, ai: 'easy' })]) { try { PZ.decodePuzzle(badCode); } catch { errs++; } }
+  ok(errs === 3, 'bad codes are rejected with a message');
+}

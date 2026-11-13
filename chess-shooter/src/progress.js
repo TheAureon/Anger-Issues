@@ -3,6 +3,7 @@
 import { DEFAULT_EQUIPPED, CATEGORIES } from './skins.js';
 import { BATTLES, CHAPTERS, STAR_XP, starsFor } from './campaign.js';
 import { PUZZLE_XP, WEEKLY_XP, GAUNTLET, GAUNTLET_XP } from './challenges.js';
+import { LIBRARY, LIB_XP, WEEKLY_PUZZLE_XP } from './puzzles.js';
 
 export const PRESTIGE_LEVEL = 20;
 // Piece mastery: kills with each piece type unlock tiers I-V.
@@ -74,6 +75,10 @@ export const BADGES = [
   { id: 'gauntlet', icon: '🛡️', name: 'Gauntlet Champion', desc: 'Beat all four computer levels in one gauntlet run.' },
   { id: 'master', icon: '🎯', name: 'Weapon Master', desc: 'Reach mastery V with any piece (100 kills).' },
   { id: 'prestige', icon: '💎', name: 'Prestige', desc: 'Reach level 20 and prestige.' },
+  { id: 'librarian', icon: '📚', name: 'Librarian', desc: 'Earn 30 stars in the puzzle library.', progress: (s, p) => [Object.values(p.lib).reduce((a, x) => a + (x.stars || 0), 0), 30] },
+  { id: 'trickster', icon: '📦', name: 'Trickster', desc: 'Solve every Trick Shot puzzle.' },
+  { id: 'rush-20', icon: '⏱️', name: 'Rush Hour', desc: 'Score 20 in Puzzle Rush.' },
+  { id: 'architect', icon: '🛠️', name: 'Architect', desc: 'Build and test a puzzle in the editor.' },
   { id: 'shopper', icon: '🛍️', name: 'Fashionista', desc: 'Buy your first skin in the shop.' },
   { id: 'collector', icon: '🎨', name: 'Collector', desc: 'Own 10 skins.', progress: (s, p) => [Object.keys(p.owned).length, 10] },
   { id: 'veteran', icon: '🎖️', name: 'Veteran', desc: 'Finish 10 games.', progress: (s) => [s.games, 10] },
@@ -99,6 +104,9 @@ function blank() {
     weekly: { claimed: '', wins: 0 },
     gauntlet: { best: 0, clears: 0 },
     titles: {}, // title id -> unlock time
+    lib: {}, // library puzzle id -> { stars, fails }
+    wpuzzle: '', // week of the last puzzle-of-the-week reward
+    rush: { best: 0, runs: 0 },
     title: '', // equipped title id
     badges: {}, // id -> unlock timestamp
     stats: { games: 0, wins: 0, losses: 0, draws: 0, kills: 0, deaths: 0, shots: 0, hits: 0, bestStreak: 0, streak: 0, contracts: 0 },
@@ -123,6 +131,8 @@ export function load() {
       weekly: { ...b.weekly, ...(p.weekly || {}) },
       gauntlet: { ...b.gauntlet, ...(p.gauntlet || {}) },
       titles: p.titles || {},
+      lib: p.lib || {},
+      rush: { ...b.rush, ...(p.rush || {}) },
       equipped: { ...DEFAULT_EQUIPPED, ...(p.equipped || {}) },
     };
   } catch {
@@ -195,6 +205,58 @@ export class Progress {
   get titleName() {
     const t = TITLES.find((x) => x.id === this.p.title);
     return t ? t.name : '';
+  }
+
+  // --- Puzzle library, rush, weekly puzzle -----------------------------------------------
+
+  spendXp(n) {
+    if (this.balance < n) return false;
+    this.p.spent += n;
+    this.save();
+    return true;
+  }
+  get libStars() {
+    return Object.values(this.p.lib).reduce((a, x) => a + (x.stars || 0), 0);
+  }
+  failLibrary(id) {
+    const e = (this.p.lib[id] ||= { stars: 0, fails: 0 });
+    e.fails++;
+    this.save();
+  }
+  // Stars: 1 solved, 2 solved without hints, 3 also on the first try.
+  recordLibrary(id, { hints }) {
+    const e = (this.p.lib[id] ||= { stars: 0, fails: 0 });
+    const stars = 1 + (hints ? 0 : 1) + (!hints && !e.fails ? 1 : 0);
+    const before = e.stars;
+    if (stars > before) {
+      let xp = 0;
+      for (let k = before + 1; k <= stars; k++) xp += LIB_XP[k];
+      e.stars = stars;
+      this.addXp(xp, `Puzzle star${stars - before > 1 ? 's' : ''} ×${stars - before}`);
+    }
+    const tricks = LIBRARY.filter((x) => x.pack === 'trick');
+    if (tricks.every((x) => this.p.lib[x.id] && this.p.lib[x.id].stars)) this.unlock('trickster');
+    this.checkCounters();
+    this.checkTitles();
+    this.save();
+    return { stars, before };
+  }
+  solveWeeklyPuzzle(week) {
+    if (this.p.wpuzzle === week) return { already: true };
+    this.p.wpuzzle = week;
+    this.addXp(WEEKLY_PUZZLE_XP, 'Puzzle of the week');
+    this.save();
+    return { already: false };
+  }
+  recordRush(score) {
+    const r = this.p.rush;
+    r.runs++;
+    const best = score > r.best;
+    r.best = Math.max(r.best, score);
+    if (score) this.addXp(10 * score, `Puzzle Rush ×${score}`);
+    if (score >= 20) this.unlock('rush-20');
+    this.save();
+    return { best };
   }
 
   // --- Daily puzzle, weekly challenge, gauntlet -------------------------------------------
@@ -570,5 +632,6 @@ export const TITLES = [
   { id: 'rebel', name: 'Rebel', desc: 'Win 3 weekly challenges.', xp: 150, when: (pr) => pr.p.weekly.wins >= 3 },
   { id: 'weapon-master', name: 'Weapon Master', desc: 'Reach mastery V with any piece.', xp: 150, when: (pr) => Object.values(pr.p.mastery).some((k) => masteryTier(k) >= 5) },
   { id: 'prestigious', name: 'The Prestigious', desc: 'Prestige at least once.', xp: 0, when: (pr) => pr.p.prestige > 0 },
+  { id: 'scholar', name: 'Scholar', desc: 'Earn 3 stars on every library puzzle.', xp: 300, when: (pr) => LIBRARY.every((x) => pr.p.lib[x.id] && pr.p.lib[x.id].stars >= 3) },
   { id: 'legend', name: 'Legend', desc: 'Unlock every badge.', xp: 500, when: (pr) => BADGES.every((b) => pr.p.badges[b.id]) },
 ];

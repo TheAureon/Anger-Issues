@@ -71,6 +71,26 @@ export class Minimap {
         g.lineWidth = 2;
         g.strokeRect(x + 1, y - cell + 1, cell - 2, cell - 2);
       }
+      if (d.smoke && d.smoke(s)) {
+        g.fillStyle = 'rgba(200,204,212,0.6)';
+        g.fillRect(x, y - cell, cell, cell);
+      }
+      if (d.cover && d.cover.includes(s)) {
+        g.fillStyle = '#7a5230';
+        g.fillRect(x + cell * 0.14, y - cell * 0.86, cell * 0.72, cell * 0.72);
+        g.strokeStyle = '#3e2814';
+        g.lineWidth = 2;
+        g.strokeRect(x + cell * 0.14, y - cell * 0.86, cell * 0.72, cell * 0.72);
+        g.beginPath();
+        g.moveTo(x + cell * 0.14, y - cell * 0.86);
+        g.lineTo(x + cell * 0.86, y - cell * 0.14);
+        g.stroke();
+      }
+      if (d.hint && (s === d.hint.from || s === d.hint.to)) {
+        g.strokeStyle = '#ffd34d';
+        g.lineWidth = 3;
+        g.strokeRect(x + 2, y - cell + 2, cell - 4, cell - 4);
+      }
       if (d.fog && !d.fog.has(s)) {
         g.fillStyle = 'rgba(14,15,24,0.72)';
         g.fillRect(x, y - cell, cell, cell);
@@ -144,6 +164,15 @@ export class Minimap {
         const [x, y] = sqXY(s);
         g.beginPath();
         g.arc(x + cell / 2, y - cell / 2, cell * 0.15, 0, Math.PI * 2);
+        g.fill();
+      }
+    }
+    if (d.smokeTargets) {
+      g.fillStyle = 'rgba(190,196,204,0.9)';
+      for (const s of d.smokeTargets) {
+        const [x, y] = sqXY(s);
+        g.beginPath();
+        g.arc(x + cell / 2, y - cell / 2, cell * 0.2, 0, Math.PI * 2);
         g.fill();
       }
     }

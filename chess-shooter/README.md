@@ -79,7 +79,7 @@ badge is worth another 50 XP.
 
 Levels need 100, 300, 600, 1000… XP in total, and every two levels give a new rank, from Private up
 to Grandmaster. Your level, XP bar and badge count are on the main menu; **Badges & Stats** shows all
-41 badges (locked ones say how to get them, counters show progress) plus your record: games, wins,
+45 badges (locked ones say how to get them, counters show progress) plus your record: games, wins,
 kills, accuracy and best win streak. The game-over screen lists what you earned that game.
 
 Progress is saved in the browser on this device. Settings has a reset button.
@@ -123,6 +123,50 @@ pieces can see: squares next to them, squares they can move to or shoot, and alo
 the first piece. Unseen squares are darkened and enemies there are hidden, in 3D and on the corner
 board. The computer can only shoot at pieces it can see. In Pass & Play the fog follows whoever holds
 the device, and the turn recap won't reveal moves made in the fog.
+
+## Puzzles
+
+Main menu → **Puzzles**. Every library puzzle is generated at random and kept only if a solver proves
+it works (`scripts/gen-puzzles.mjs` bakes them into `src/puzzle-data.js`; re-run it after changing the
+generator). Stars: ★ solve it, ★★ without hints, ★★★ on the first try. Library puzzles are practice:
+they pay star XP, not normal victory or kill XP.
+
+| Pack | Puzzles | Goal |
+| --- | --- | --- |
+| Basic Training | 8 | Find the one piece that can shoot the king (sure-shot) |
+| Two-Movers | 8 | Shoot the king in 2 turns against perfect defence (sure-shot) |
+| Trick Shots | 6 | A crate blocks the straight shot: look through the knight and click the exact spot (aim high or at the edge) |
+| Survival | 5 | Your king is in the line of fire: survive 2 enemy turns (sure-shot) |
+| Odds | 5 | Shots can miss: take the shot with the best hit chance |
+| Rescue | 4 | Promote a pawn within 2 turns, under fire (sure-shot) |
+| Fog | 4 | Fog of War: scout, then shoot the king |
+
+- **Sure-shot** means shots never miss, so it's pure logic.
+- **Hints** (💡 in the top bar, 25 XP each): the first shows the piece, the second the target (for trick
+  shots, the exact spot to click). Using one caps that puzzle at ★★.
+- **Puzzle of the week:** a hard two-mover, 200 XP once a week.
+- **Puzzle Rush:** 3 minutes, 3 strikes, endless generated puzzles ("shoot the king", "shoot the most
+  valuable piece"). 10 XP per solve; best score saved.
+- **Editor:** place pieces and crates, choose rules, goal, turns, opponent and sure-shot, test it, then
+  **Make code** to get a `GM1-…` code. Anyone can paste it in **Play a code**.
+
+## Battlefield options and new tools
+
+In game setup (vs computer or Pass & Play), any of these turn off the leaderboard score:
+
+- **Cover:** six crates, mirrored between the halves. They block moves, lines of fire, sight and bullets.
+- **Tactics:** once per game each, a **rook can go on overwatch** (spends your turn; the first enemy that
+  moves into its line gets shot at automatically before the turn passes) and a **bishop can throw
+  smoke** onto a square on its diagonals (shots through the 3×3 cloud wobble far more for two turns each).
+  Use them from the piece card. The computer can use them too.
+- **Weather:** wind (30–54 km/h, pushes bullets sideways; an arrow shows its direction relative to your
+  view) or rain (more wobble, darker light).
+
+Also:
+- **Sniper scope** (<kbd>Z</kbd>, right-click or the ⌖ button): zoom in, fire at the centre of the sights with
+  steadier aim than hip fire. The sights sway; hold <kbd>Shift</kbd> to hold your breath for a moment.
+- **Replays:** after any game, **Replay game** plays it back from the overview (pause, 1×/2×/4×, stop), and
+  **Best shot** replays your most impressive kill through the kill-cam.
 
 ## Challenges
 
@@ -178,7 +222,8 @@ Comeback Kid (win from 5+ material down), Blitz (win in 20 turns), one for beati
 Hot Seat, Fashionista, Collector, Fog Walker (win a Fog of War game), Graduate / Front-Line
 Veteran / High Command (finish each campaign chapter), Decorated (all 36 stars), Contractor (10
 contracts), Puzzler, On Fire (7-day puzzle streak), Rule Breaker (weekly win), Gauntlet Champion,
-Weapon Master (mastery V), Prestige, Veteran (10 games), Centurion (100 kills), Trigger Happy (250 shots).
+Weapon Master (mastery V), Prestige, Librarian (30 puzzle stars), Trickster (all trick shots),
+Rush Hour (20 in Puzzle Rush), Architect (test a puzzle in the editor), Veteran (10 games), Centurion (100 kills), Trigger Happy (250 shots).
 
 ## UsForge leaderboard
 
@@ -216,6 +261,9 @@ src/progress.js   XP, levels, ranks, stats, badges, shop wallet (saved in localS
 src/skins.js      shop catalogue: piece, board and gun skins
 src/campaign.js   campaign chapters, battles, star goals
 src/challenges.js daily puzzles, weekly rule twists, gauntlet rounds
+src/puzzles.js    puzzle packs, goals, puzzle of the week, share codes
+src/puzzlegen.js  puzzle generator and solver (also used live by Puzzle Rush)
+src/puzzle-data.js generated puzzle library (scripts/gen-puzzles.mjs)
 src/icons.js      inline SVG icons and chess-piece silhouettes for the UI
 src/audio.js      synthesized sound effects
 src/music.js      procedural soundtrack (WebAudio sequencer)

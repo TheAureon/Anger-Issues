@@ -24,11 +24,14 @@
           <button id="btn-view" data-icon="map" title="Overview camera (V)" aria-label="Overview camera"></button>
           <button id="btn-music" data-icon="music" title="Music (M)" aria-label="Music"></button>
           <button id="btn-sound" title="All sound" aria-label="Sound"></button>
+          <button id="btn-hint" class="hidden" data-icon="bulb" title="Hint" aria-label="Hint"></button>
+          <button id="btn-scope" class="hidden" data-icon="scope" title="Sniper scope (Z or right-click)" aria-label="Sniper scope"></button>
           <button id="btn-help" data-icon="help" title="How to play" aria-label="How to play"></button>
           <span class="tb-sep"></span>
           <button id="btn-menu" data-icon="pause" title="Pause (Esc)" aria-label="Pause"></button>
         </div>
       </div>
+      <div id="wind-hud" class="wind-hud glass hidden"><span id="wind-arrow" class="wind-arrow">↑</span><span>Wind</span><b id="wind-speed"></b></div>
       <div id="status"></div>
       <div id="graves" class="glass hidden">
         <div class="grave-row"><span class="grave-lbl">Black lost</span><div id="grave-b"></div></div>
@@ -44,10 +47,17 @@
           </div>
           <div class="card-row" data-icon="boot"><span id="card-move"></span></div>
           <div class="card-row gun" data-icon="gun"><span id="card-gun"></span></div>
+          <button id="card-ability" class="card-ability hidden"></button>
         </div>
         <canvas id="minimap"></canvas>
       </div>
 
+      <div id="rush-hud" class="rush-hud glass hidden"></div>
+      <div id="replay-bar" class="replay-bar glass hidden">
+        <span class="rp-label">🎬 Replay</span><span id="replay-step"></span>
+        <button id="replay-pause" title="Pause">⏸</button><button id="replay-speed" title="Speed">1×</button><button id="replay-stop" title="Stop">✕</button>
+      </div>
+      <div id="scope" class="scope hidden"><div class="scope-ring"></div><div class="scope-chance" id="scope-chance"></div><div class="scope-help">Click to fire · hold Shift to steady · Z or right-click to lower</div></div>
       <div id="tip" class="hidden"></div>
       <div id="banner" class="hidden"></div>
       <div id="hint">
@@ -87,6 +97,7 @@
         <button class="menu-btn hidden" id="btn-continue" data-icon="play"><b>Continue</b><span>Back to your game</span></button>
         <button class="menu-btn" id="btn-campaign" data-icon="flag"><b>Campaign</b><span id="campaign-sub">12 battles · 0/36 stars</span></button>
         <button class="menu-btn" id="btn-challenges" data-icon="bolt"><b>Challenges</b><span id="challenges-sub">Daily puzzle · Weekly · Gauntlet</span></button>
+        <button class="menu-btn" id="btn-puzzles" data-icon="grid"><b>Puzzles</b><span>Library, Puzzle Rush, editor</span></button>
         <button class="menu-btn" id="btn-vs-ai" data-icon="target"><b>Play vs Computer</b><span>Four difficulty levels</span></button>
         <button class="menu-btn" id="btn-vs-local" data-icon="users"><b>Pass &amp; Play</b><span>Play a friend on this device, no internet needed</span></button>
         <button class="menu-btn" id="btn-shop" data-icon="bag"><b>Shop</b><span id="shop-menu-sub">Spend XP on skins</span></button>
@@ -131,6 +142,12 @@
             <button class="choice" data-side="r"><b>Random</b><span>Toss a coin</span></button>
           </div>
         </div>
+        <div class="row-label">Battlefield <small class="lb-note">(any of these: no leaderboard score)</small></div>
+        <div class="variants">
+          <label class="variant"><input type="checkbox" id="v-cover" /><span><b>📦 Cover</b><small>Six crates block moves, bullets and sight</small></span></label>
+          <label class="variant"><input type="checkbox" id="v-tactics" /><span><b>🎖️ Tactics</b><small>Rook overwatch and bishop smoke, once each</small></span></label>
+          <label class="variant"><span><b>🌦️ Weather</b><small>Wind pushes bullets, rain adds wobble</small></span><select id="v-weather"><option value="clear">Clear</option><option value="wind">Wind</option><option value="rain">Rain</option></select></label>
+        </div>
         <div id="local-options" class="hidden">
           <div class="row-label">Players</div>
           <div class="names">
@@ -156,6 +173,66 @@
         <div class="ho-alert hidden" id="ho-alert"></div>
         <button class="primary" id="btn-ready">Start my turn</button>
         <button class="menu-btn small" id="btn-ho-pause">Pause</button>
+      </div>
+    </div>
+
+    <!-- Puzzles -->
+    <div id="puzzles" class="overlay hidden">
+      <div class="panel wide">
+        <div class="shop-head">
+          <h2>Puzzles</h2>
+          <div class="wallet" data-icon="star"><b id="pz-stars">0</b>/<span id="pz-total">0</span></div>
+        </div>
+        <p class="sub small-print">Every library puzzle is checked by a solver. ★ solve it · ★★ without hints · ★★★ on the first try.</p>
+        <div class="ch-grid four">
+          <div class="ch-card" id="pz-weekly"></div>
+          <div class="ch-card" id="pz-rush"></div>
+          <div class="ch-card" id="pz-editor"></div>
+          <div class="ch-card" id="pz-codecard">
+            <div class="ch-top"><span class="ch-kicker">Play a code</span></div>
+            <b class="ch-name">From a friend</b>
+            <p>Paste a puzzle code (it starts with GM1-).</p>
+            <input id="pz-code" class="text-in" placeholder="GM1-…" autocomplete="off" />
+            <div class="err" id="pz-code-err"></div>
+            <button class="primary" data-pz="code">Play code</button>
+          </div>
+        </div>
+        <div id="pz-packs"></div>
+        <button class="primary" id="btn-puzzles-close" data-icon="back">Back</button>
+      </div>
+    </div>
+
+    <!-- Puzzle editor -->
+    <div id="editor" class="overlay hidden">
+      <div class="panel wide">
+        <h2>Puzzle editor</h2>
+        <div class="ed-wrap">
+          <div>
+            <div class="ed-board" id="ed-board"></div>
+            <div class="ed-palette" id="ed-palette"></div>
+          </div>
+          <div class="ed-side">
+            <label class="setting"><span>Title</span><input id="ed-title" class="text-in" maxlength="40" placeholder="Custom puzzle" /></label>
+            <label class="setting"><span>Rules</span><select id="ed-mode"><option value="mercizero">MerciZero</option><option value="classic">Classic</option><option value="fog">Fog of War</option></select></label>
+            <label class="setting"><span>Goal</span><select id="ed-goal"><option value="king">Shoot the king</option><option value="kill">Kill the target</option><option value="survive">Survive</option><option value="promote">Promote a pawn</option></select></label>
+            <label class="setting" id="ed-n-row"><span>Turns</span><input id="ed-n" type="number" min="1" max="30" value="2" class="text-in num" /></label>
+            <label class="setting"><span>Opponent</span><select id="ed-ai"><option value="easy">Recruit</option><option value="normal" selected>Soldier</option><option value="hard">Sniper</option><option value="brutal">Warlord</option></select></label>
+            <label class="setting check"><span>Sure-shot<small>Shots never miss</small></span><input type="checkbox" id="ed-sure" checked /></label>
+            <div class="err" id="ed-err"></div>
+            <div class="ed-buttons">
+              <button class="secondary slim" id="ed-standard">Start position</button>
+              <button class="secondary slim" id="ed-clear">Clear board</button>
+            </div>
+            <button class="primary" id="ed-test" data-icon="play">Test it</button>
+            <div class="row-label">Share</div>
+            <input id="ed-code" class="text-in" placeholder="Make a code, or paste one to load" autocomplete="off" />
+            <div class="ed-buttons">
+              <button class="secondary slim" id="ed-copy">Make code</button>
+              <button class="secondary slim" id="ed-load">Load code</button>
+            </div>
+            <button class="secondary" id="ed-close" data-icon="back">Close</button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -324,6 +401,10 @@
         <button class="primary hidden" id="btn-next-battle" data-icon="flag">Next battle</button>
         <button class="primary" id="btn-again" data-icon="restart">Play again</button>
         <button class="secondary" id="btn-over-menu" data-icon="home">Main menu</button>
+        <div class="ov-row">
+          <button class="secondary" id="btn-replay" data-icon="play">Replay game</button>
+          <button class="secondary" id="btn-bestshot" data-icon="target">Best shot</button>
+        </div>
         <button class="secondary" id="btn-over-look" data-icon="eye">Look at the board</button>
       </div>
     </div>
