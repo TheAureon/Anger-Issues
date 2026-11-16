@@ -79,6 +79,9 @@ export const BADGES = [
   { id: 'trickster', icon: '📦', name: 'Trickster', desc: 'Solve every Trick Shot puzzle.' },
   { id: 'rush-20', icon: '⏱️', name: 'Rush Hour', desc: 'Score 20 in Puzzle Rush.' },
   { id: 'architect', icon: '🛠️', name: 'Architect', desc: 'Build and test a puzzle in the editor.' },
+  { id: 'secret-titan', secret: true, icon: '🗿', name: 'Titan Awakened', desc: 'Summoned the Chess Titan with GM1-ChessTitan.' },
+  { id: 'secret-storm', secret: true, icon: '🌧️', name: 'Pawn Storm', desc: 'Made it rain pawns with GM1-PawnStorm.' },
+  { id: 'secret-disco', secret: true, icon: '🪩', name: 'Night Fever', desc: 'Started the disco with GM1-Disco.' },
   { id: 'shopper', icon: '🛍️', name: 'Fashionista', desc: 'Buy your first skin in the shop.' },
   { id: 'collector', icon: '🎨', name: 'Collector', desc: 'Own 10 skins.', progress: (s, p) => [Object.keys(p.owned).length, 10] },
   { id: 'veteran', icon: '🎖️', name: 'Veteran', desc: 'Finish 10 games.', progress: (s) => [s.games, 10] },
@@ -633,5 +636,5 @@ export const TITLES = [
   { id: 'weapon-master', name: 'Weapon Master', desc: 'Reach mastery V with any piece.', xp: 150, when: (pr) => Object.values(pr.p.mastery).some((k) => masteryTier(k) >= 5) },
   { id: 'prestigious', name: 'The Prestigious', desc: 'Prestige at least once.', xp: 0, when: (pr) => pr.p.prestige > 0 },
   { id: 'scholar', name: 'Scholar', desc: 'Earn 3 stars on every library puzzle.', xp: 300, when: (pr) => LIBRARY.every((x) => pr.p.lib[x.id] && pr.p.lib[x.id].stars >= 3) },
-  { id: 'legend', name: 'Legend', desc: 'Unlock every badge.', xp: 500, when: (pr) => BADGES.every((b) => pr.p.badges[b.id]) },
+  { id: 'legend', name: 'Legend', desc: 'Unlock every badge.', xp: 500, when: (pr) => BADGES.every((b) => b.secret || pr.p.badges[b.id]) },
 ];

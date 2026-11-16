@@ -129,3 +129,18 @@ export function fanfare(win) {
   const notes = win ? [523, 659, 784, 1046] : [392, 349, 311, 262];
   notes.forEach((f, i) => tone(t + i * 0.16, 0.3, f, f, { type: 'triangle', gain: 0.25 }));
 }
+
+// Easter-egg roar: a falling growl with a rumble.
+export function roar() {
+  if (!ensure() || muted) return;
+  const t = ctx.currentTime;
+  tone(t, 1.4, 160, 45, { type: 'sawtooth', gain: 0.35 });
+  tone(t + 0.05, 1.3, 120, 38, { type: 'square', gain: 0.18 });
+  noise(t, 1.2, { freq: 400, gain: 0.6, attack: 0.15 });
+}
+export function stomp() {
+  if (!ensure() || muted) return;
+  const t = ctx.currentTime;
+  tone(t, 0.5, 90, 28, { gain: 0.9 });
+  noise(t, 0.4, { freq: 300, gain: 0.7 });
+}

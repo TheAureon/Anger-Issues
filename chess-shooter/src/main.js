@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import './style.css';
 import * as R from './rules.js';
 import { chooseAction, DIFFICULTIES } from './ai.js';
-import { buildPiece, buildViewGun, setEnvMap, setPieceSkin, setGunSkin, goldTrim } from './pieces.js';
+import { buildPiece, buildViewGun, buildPieceBody, setEnvMap, setPieceSkin, setGunSkin, goldTrim } from './pieces.js';
 import { CATEGORIES, findSkin, swatches } from './skins.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { buildWorld, applyBoardSkin, applyArena } from './world.js';
@@ -1451,6 +1451,7 @@ canvas.addEventListener('pointerup', (e) => {
   down = null;
   dragging = false;
   if (wasDrag) return;
+  if (titan) return titanHit(e.clientX, e.clientY);
   if (scoped) return scopeFire();
   const h = pick(e.clientX, e.clientY);
   if (!h) return;
@@ -1516,6 +1517,7 @@ window.addEventListener('keydown', (e) => {
     if (screen === 'setup') return showScreen('main-menu');
     return;
   }
+  if (k === 'escape' && screen === 'egg') return endEgg();
   if (k === 'm') return setMusic(!sfx.music.enabled);
   if (screen !== 'game') return;
   if (k === 'v' || k === 'tab') {
@@ -1543,7 +1545,7 @@ function cyclePiece(dir) {
 
 // --- Screens: title → main menu → setup → game, plus pause / settings / help overlays ------
 
-const SCREENS = ['title', 'main-menu', 'setup', 'pause', 'over', 'handoff'];
+const SCREENS = ['title', 'main-menu', 'setup', 'pause', 'over', 'handoff', 'egg'];
 let screen = 'title';
 function showScreen(name) {
   screen = name;
@@ -1876,6 +1878,7 @@ function renderBadges() {
       bar = `<div class="mini"><div style="width:${Math.min(100, (cur / goal) * 100)}%"></div></div><small>${Math.min(cur, goal)} / ${goal}</small>`;
     }
     const when = at ? `<small>Unlocked ${new Date(at).toLocaleDateString()}</small>` : '';
+    if (b.secret && !at) return '<div class="badge locked secret"><div class="b-icon">❓</div><div><b>Secret</b><span>Some codes aren’t in any puzzle book…</span></div></div>';
     return `<div class="badge ${at ? 'got' : 'locked'}"><div class="b-icon">${b.icon}</div><div><b>${b.name}</b><span>${b.desc}</span>${bar}${when}</div></div>`;
   }).join('');
 }
@@ -2624,6 +2627,7 @@ $('puzzles').addEventListener('click', (e) => {
   }
   if (what === 'editor') return openEditor();
   if (what === 'code') {
+    if (tryEgg($('pz-code').value)) return;
     try {
       const p = decodePuzzle($('pz-code').value);
       closeOverlay('puzzles');
@@ -2787,6 +2791,7 @@ $('ed-copy').addEventListener('click', async () => {
   }
 });
 $('ed-load').addEventListener('click', () => {
+  if (tryEgg($('ed-code').value)) return;
   try {
     edLoad(decodePuzzle($('ed-code').value));
     renderEditor();
@@ -2911,6 +2916,325 @@ function updateWeather(dt) {
   }
 }
 
+// --- Easter eggs --------------------------------------------------------------------------------
+// Secret codes typed into Puzzles → "Play a code" (or the editor's code box).
+
+const EGGS = {
+  'gm1-chesstitan': () => titanEgg(),
+  'gm1-pawnstorm': () => pawnStormEgg(),
+  'gm1-disco': () => discoEgg(),
+};
+function tryEgg(code) {
+  const f = EGGS[String(code).trim().toLowerCase()];
+  if (!f) return false;
+  f();
+  return true;
+}
+
+// The Chess Titan: a giant figure assembled from white pieces. Each part: piece type, the point its
+// base sits at, its rotation, and the limb it belongs to (for animation). Units: one board square.
+let titan = null; // { root, parts, limbs, t, mode }
+const TITAN_PARTS = [
+  // legs: a pawn standing on an upside-down pawn, each side
+  { type: 'p', pos: [-0.32, 0, 0], rot: [0, 0, 0], limb: 'legL' },
+  { type: 'p', pos: [-0.32, 1.24, 0], rot: [Math.PI, 0, 0], limb: 'legL' },
+  { type: 'p', pos: [0.32, 0, 0], rot: [0, 0, 0], limb: 'legR' },
+  { type: 'p', pos: [0.32, 1.24, 0], rot: [Math.PI, 0, 0], limb: 'legR' },
+  // hips: a rook lying across
+  { type: 'r', pos: [-0.42, 1.36, 0], rot: [0, 0, -Math.PI / 2], limb: 'body' },
+  // torso and head
+  { type: 'q', pos: [0, 1.6, 0], rot: [0, 0, 0], limb: 'body' },
+  { type: 'b', pos: [-0.51, 2.5, 0], rot: [0, 0, -Math.PI / 2], limb: 'body' },
+  { type: 'n', pos: [0, 2.72, 0], rot: [0, 0, 0], limb: 'head' },
+  // arms: two pawns each, the right one raised to wave
+  { type: 'p', pos: [-0.5, 2.5, 0], rot: [0, 0, Math.PI / 2], limb: 'armL' },
+  { type: 'p', pos: [-1.1, 2.5, 0], rot: [0, 0, Math.PI / 2 + 0.6], limb: 'armL' },
+  { type: 'p', pos: [0.5, 2.5, 0], rot: [0, 0, -Math.PI / 2], limb: 'armR' },
+  { type: 'p', pos: [1.1, 2.5, 0], rot: [0, 0, -Math.PI / 2 + 0.9], limb: 'armR' },
+  // a crown for the king of the board
+  { type: 'k', pos: [0, 3.55, 0], rot: [0, 0, 0], limb: 'head', scale: 0.35 },
+];
+const TITAN_SCALE = 1.55;
+
+function hideBoardPieces(hide) {
+  for (const g of groups.values()) g.userData.eggHidden = hide;
+  markerRoot.visible = !hide;
+  activeRing.visible = hoverRing.visible = false;
+}
+
+function titanEgg() {
+  if (titan) return;
+  closeOverlay('puzzles');
+  closeOverlay('editor');
+  showScreen('egg');
+  hideBoardPieces(true);
+  progress.unlock('secret-titan');
+  const root = new THREE.Group();
+  root.rotation.y = Math.PI; // knights face -Z; turn the titan to face the camera
+  root.scale.setScalar(TITAN_SCALE);
+  const limbs = {};
+  const pivots = { legL: [0, 0, 0], legR: [0, 0, 0], body: [0, 0, 0], head: [0, 2.72, 0], armL: [-0.5, 2.5, 0], armR: [0.5, 2.5, 0] };
+  for (const [name, p] of Object.entries(pivots)) {
+    const g = new THREE.Group();
+    g.position.set(...p);
+    root.add(g);
+    limbs[name] = g;
+  }
+  // Glowing eyes on the knight's head.
+  const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff2a1a });
+  const eyes = [];
+  for (const x of [-0.1, 0.1]) {
+    const e = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 6), eyeMat);
+    e.position.set(x, 0.76, -0.13);
+    e.visible = false;
+    limbs.head.add(e);
+    eyes.push(e);
+  }
+  const parts = TITAN_PARTS.map((def, i) => {
+    const mesh = buildPieceBody(def.type, 'w');
+    mesh.traverse((o) => o.isMesh && (o.castShadow = true));
+    const holder = new THREE.Group();
+    holder.add(mesh);
+    const pv = pivots[def.limb];
+    holder.userData.slot = { pos: new THREE.Vector3(def.pos[0] - pv[0], def.pos[1] - pv[1], def.pos[2] - pv[2]), rot: new THREE.Euler(...def.rot), scale: def.scale || 1 };
+    limbs[def.limb].add(holder);
+    // Start where a white piece stands on the board, then fly up into place.
+    const sq = R.sqAt(i % 8, i < 8 ? 1 : 0);
+    holder.userData.from = R.toWorld(sq);
+    holder.visible = false;
+    return holder;
+  });
+  scene.add(root);
+  titan = { root, parts, limbs, eyes, t: 0, mode: 'assemble', jump: 0 };
+  $('egg-title').textContent = 'The Chess Titan';
+  $('egg-sub').textContent = 'Assembling…';
+  $('egg-act1').textContent = '🦶 Stomp';
+  $('egg-act2').textContent = '🕺 Dance';
+  viewMode = 'over';
+  ovPitch = 0.28;
+  ovDist = 13;
+  _target.y = 2.6; // look at the titan's middle
+  startTransition(0.8);
+  assembleTitan();
+}
+
+async function assembleTitan() {
+  const T = titan;
+  const tmpW = new THREE.Vector3();
+  for (let i = 0; i < T.parts.length; i++) {
+    const h = T.parts[i];
+    const slot = h.userData.slot;
+    // Convert the board start point into the limb's local space.
+    const f = h.userData.from;
+    tmpW.set(f.x, 0, f.z);
+    h.parent.updateWorldMatrix(true, false);
+    const startLocal = h.parent.worldToLocal(tmpW.clone());
+    const a = startLocal;
+    const b = slot.pos.clone();
+    const q0 = new THREE.Quaternion();
+    const q1 = new THREE.Quaternion().setFromEuler(slot.rot);
+    h.visible = true;
+    sfx.click();
+    tween(0.7, (k) => {
+      if (!titan) return;
+      const e = ease(k);
+      h.position.lerpVectors(a, b, e);
+      h.position.y += Math.sin(Math.PI * k) * 1.4;
+      h.quaternion.slerpQuaternions(q0, q1, e);
+      h.scale.setScalar(slot.scale);
+      h.rotation.y += (1 - k) * 0.4;
+    });
+    await wait(150);
+    if (titan !== T) return;
+  }
+  await wait(800);
+  if (titan !== T) return;
+  for (const e of T.eyes) e.visible = true;
+  sfx.roar();
+  banner('THE CHESS TITAN AWAKENS', 2200);
+  T.shake = 0.6;
+  T.mode = 'idle';
+  $('egg-sub').textContent = 'Click it to say hi.';
+}
+
+function titanStomp() {
+  if (!titan || titan.mode === 'assemble') return;
+  titan.jump = 0.0001;
+  titan.mode = 'idle';
+}
+function titanDance() {
+  if (!titan || titan.mode === 'assemble') return;
+  titan.mode = titan.mode === 'dance' ? 'idle' : 'dance';
+  $('egg-act2').textContent = titan.mode === 'dance' ? '✋ Stop' : '🕺 Dance';
+  if (titan.mode === 'dance' && !discoOn) discoEgg(true);
+  if (titan.mode !== 'dance' && discoOn) discoEgg(true);
+}
+function titanWave() {
+  if (!titan || titan.mode === 'assemble') return;
+  titan.wave = 1.6;
+  sfx.roar();
+}
+
+function updateTitan(dt, time) {
+  const T = titan;
+  if (!T) return;
+  T.t += dt;
+  ovYaw += dt * 0.12;
+  const L = T.limbs;
+  if (T.mode !== 'assemble') {
+    // Breathing, looking around, and the right arm's wave.
+    L.body.position.y = Math.sin(time * 2) * 0.02;
+    L.head.rotation.y = Math.sin(time * 0.7) * 0.35;
+    const wave = T.wave > 0 ? Math.sin(time * 9) * 0.5 : Math.sin(time * 1.3) * 0.08;
+    if (T.wave > 0) T.wave -= dt;
+    L.armR.rotation.z = 0.25 + wave;
+    L.armL.rotation.z = -0.15 - Math.sin(time * 1.1) * 0.06;
+    if (T.mode === 'dance') {
+      L.armL.rotation.z = -0.4 - Math.sin(time * 6) * 0.6;
+      L.armR.rotation.z = 0.4 + Math.sin(time * 6 + 1) * 0.6;
+      T.root.rotation.y = Math.PI + Math.sin(time * 3) * 0.5;
+      T.root.position.y = Math.abs(Math.sin(time * 6)) * 0.25;
+      L.legL.rotation.z = Math.sin(time * 6) * 0.12;
+      L.legR.rotation.z = -Math.sin(time * 6) * 0.12;
+    } else {
+      T.root.rotation.y += (Math.PI - T.root.rotation.y) * Math.min(1, dt * 3);
+      L.legL.rotation.z = L.legR.rotation.z = 0;
+      if (!T.jump) T.root.position.y = 0;
+    }
+    if (T.jump) {
+      T.jump += dt;
+      const k = T.jump / 0.9;
+      T.root.position.y = Math.sin(Math.PI * Math.min(1, k)) * 1.6;
+      if (k >= 1) {
+        T.jump = 0;
+        T.root.position.y = 0;
+        T.shake = 0.5;
+        sfx.stomp();
+        fx.dust(new THREE.Vector3(0, 0.1, 0), 18);
+        // Everything on the board jumps.
+        for (const g of groups.values()) {
+          const y0 = g.position.y;
+          tween(0.5, (q) => (g.position.y = y0 + Math.sin(Math.PI * q) * 0.5));
+        }
+      }
+    }
+  }
+  if (T.shake > 0) {
+    T.shake -= dt;
+    camera.position.x += (Math.random() - 0.5) * T.shake * 0.3;
+    camera.position.y += (Math.random() - 0.5) * T.shake * 0.3;
+  }
+}
+
+function endEgg() {
+  if (titan) {
+    scene.remove(titan.root);
+    titan = null;
+  }
+  if (discoOn) discoEgg(true);
+  _target.y = 0;
+  ovDist = 11.5;
+  hideBoardPieces(false);
+  showScreen('main-menu');
+  if (st && started) refresh();
+}
+
+// Clicking the titan: it waves and roars.
+function titanHit(clientX, clientY) {
+  if (!titan) return false;
+  const r = canvas.getBoundingClientRect();
+  ndc.set(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
+  raycaster.setFromCamera(ndc, camera);
+  if (raycaster.intersectObject(titan.root, true).length) {
+    titanWave();
+    return true;
+  }
+  return false;
+}
+
+// --- Pawn storm: it rains pawns ----------------------------------------------------------------
+
+const stormBits = [];
+function pawnStormEgg() {
+  closeOverlay('puzzles');
+  closeOverlay('editor');
+  progress.unlock('secret-storm');
+  banner('It’s raining pawns!', 1800);
+  sfx.fanfare(true);
+  for (let i = 0; i < 70; i++) {
+    const g = buildPieceBody('p', i % 2 ? 'w' : 'b');
+    g.position.set((Math.random() - 0.5) * 9, 6 + Math.random() * 10, (Math.random() - 0.5) * 9);
+    g.rotation.set(Math.random() * 6, Math.random() * 6, Math.random() * 6);
+    g.traverse((o) => o.isMesh && (o.castShadow = true));
+    scene.add(g);
+    stormBits.push({ g, v: new THREE.Vector3((Math.random() - 0.5) * 1.5, -2 - Math.random() * 3, (Math.random() - 0.5) * 1.5), spin: (Math.random() - 0.5) * 8, life: 9 + Math.random() * 3, bounced: 0 });
+  }
+}
+function updateStorm(dt) {
+  for (let i = stormBits.length - 1; i >= 0; i--) {
+    const b = stormBits[i];
+    b.life -= dt;
+    b.v.y -= 9.8 * dt;
+    b.g.position.addScaledVector(b.v, dt);
+    const onBoard = Math.abs(b.g.position.x) < 4.5 && Math.abs(b.g.position.z) < 4.5;
+    const floor = onBoard ? 0.12 : -1.5;
+    if (b.g.position.y < floor) {
+      b.g.position.y = floor;
+      b.v.y = Math.abs(b.v.y) * 0.45;
+      b.v.x *= 0.7;
+      b.v.z *= 0.7;
+      b.spin *= 0.6;
+      if (b.bounced++ < 2) sfx.step();
+      if (Math.abs(b.v.y) < 0.4) b.v.y = 0;
+    }
+    b.g.rotation.x += b.spin * dt;
+    b.g.rotation.z += b.spin * 0.6 * dt;
+    if (b.life < 0.6) b.g.scale.multiplyScalar(Math.max(0, 1 - dt * 5));
+    if (b.life <= 0) {
+      scene.remove(b.g);
+      stormBits.splice(i, 1);
+    }
+  }
+}
+
+// --- Disco mode ----------------------------------------------------------------------------------
+
+let discoOn = false;
+const discoLight = new THREE.PointLight(0xff00ff, 0, 18, 1.5);
+discoLight.position.set(0, 5, 0);
+scene.add(discoLight);
+function discoEgg(quiet = false) {
+  closeOverlay('puzzles');
+  closeOverlay('editor');
+  discoOn = !discoOn;
+  if (!quiet) {
+    progress.unlock('secret-disco');
+    banner(discoOn ? 'Disco mode!' : 'Disco’s over.', 1500);
+  }
+  discoLight.intensity = discoOn ? 40 : 0;
+  if (!discoOn) {
+    for (const t of tiles) t.material.color.copy(t.userData.baseColor);
+    if (st && started) refresh();
+  }
+}
+const _disco = new THREE.Color();
+function updateDisco(time) {
+  if (!discoOn) return;
+  const beat = Math.floor(time * 2.2);
+  for (let s = 0; s < 64; s++) {
+    const h = ((s * 7 + beat * 13) % 64) / 64;
+    _disco.setHSL(h, 0.85, (s + beat) % 3 === 0 ? 0.62 : 0.32);
+    tiles[s].material.color.copy(_disco);
+  }
+  discoLight.color.setHSL((time * 0.4) % 1, 1, 0.5);
+  discoLight.position.set(Math.sin(time * 1.7) * 3, 4.5, Math.cos(time * 1.3) * 3);
+  if (!titan) for (const g of groups.values()) g.position.y = Math.abs(Math.sin(time * 6 + g.position.x)) * 0.12;
+}
+
+$('egg-back').addEventListener('click', endEgg);
+$('egg-act1').addEventListener('click', titanStomp);
+$('egg-act2').addEventListener('click', titanDance);
+
 // --- Main loop -----------------------------------------------------------------------------
 
 const clock = new THREE.Clock();
@@ -2963,7 +3287,7 @@ function frame() {
     camera.position.copy(_pos);
     camera.quaternion.copy(_quat);
   }
-  for (const [id, g] of groups) g.visible = !(viewMode === 'pov' && id === povId && blend > 0.55) && !hiddenIds.has(id);
+  for (const [id, g] of groups) g.visible = !(viewMode === 'pov' && id === povId && blend > 0.55) && !hiddenIds.has(id) && !g.userData.eggHidden;
 
   // Markers.
   for (const d of diamonds) {
@@ -2975,6 +3299,9 @@ function frame() {
   ringMat.color.setHSL(0.01, 1, 0.5 + Math.sin(time * 6) * 0.1);
 
   fx.update(dt);
+  updateTitan(dt, time);
+  updateStorm(dt);
+  updateDisco(time);
   updateScope(dt, time);
   updateWeather(dt);
   if (rush && rush.running && screen === 'game' && !paused) {

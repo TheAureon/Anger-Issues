@@ -150,6 +150,22 @@ they pay star XP, not normal victory or kill XP.
 - **Editor:** place pieces and crates, choose rules, goal, turns, opponent and sure-shot, test it, then
   **Make code** to get a `GM1-…` code. Anyone can paste it in **Play a code**.
 
+## Secrets
+
+Some codes aren't puzzles. Type them into **Puzzles → Play a code** (or the editor's code box);
+capitals don't matter. Each one unlocks a hidden badge, which shows as "Secret" until it's found.
+
+<details>
+<summary>Spoilers</summary>
+
+- `GM1-ChessTitan`: White's pieces leap off the board and assemble into the **Chess Titan**, a giant made
+  of pawns, a rook, a queen, a bishop and a knight with a little crown. Click it to make it wave, or make
+  it stomp (the board jumps) or dance.
+- `GM1-PawnStorm`: it rains pawns.
+- `GM1-Disco`: disco mode (enter it again to turn it off).
+
+</details>
+
 ## Battlefield options and new tools
 
 In game setup (vs computer or Pass & Play), any of these turn off the leaderboard score:

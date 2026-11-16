@@ -193,3 +193,12 @@ export function goldTrim(group) {
   const t = group.userData.trim;
   if (t) applySpec(t, { c: 0xffcf4a, r: 0.22, m: 0.95, e: 0x6a4000, ei: 0.25 }, envMap);
 }
+
+// A piece's body without its gun (easter eggs build things out of these).
+export function buildPieceBody(type, color) {
+  const mat = skinned(pieceSkin[color].body);
+  const trim = skinned(pieceSkin[color].trim);
+  const g = bodyFor(type, mat, trim);
+  g.userData = { mat, trim, type, color };
+  return g;
+}
