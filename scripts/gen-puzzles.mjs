@@ -28,7 +28,7 @@ add('basic', 8, () => G.genDrill(rng), () => ({ ai: 'easy', goal: { type: 'king'
 add('two', 8, () => G.genTwoMover(rng), () => ({ ai: 'brutal', goal: { type: 'king', n: 2 } }));
 add('trick', 6, () => G.genTrickShot(rng), (r) => ({ ai: 'easy', goal: { type: 'kill', n: 1, target: sq(r.target) }, window: Math.round(r.window * 100), aim: { x: +r.aim.x.toFixed(3), y: +r.aim.y.toFixed(3), z: +r.aim.z.toFixed(3) } }));
 add('survive', 5, () => G.genSurvival(rng), () => ({ ai: 'brutal', goal: { type: 'survive', n: 2 } }));
-add('odds', 5, () => G.genOdds(rng), (r) => ({ ai: 'easy', goal: { type: 'odds', n: 1 }, best: Math.round(r.best * 100) }));
+add('wind', 5, () => G.genCrosswind(rng), (r) => ({ ai: 'easy', goal: { type: 'kill', n: 1, target: sq(r.target) }, window: Math.round(r.window * 100), aim: { x: +r.aim.x.toFixed(3), y: +r.aim.y.toFixed(3), z: +r.aim.z.toFixed(3) }, weather: { wind: { x: +r.st.weather.wind.x.toFixed(4), z: +r.st.weather.wind.z.toFixed(4) }, kph: r.st.weather.kph } }));
 add('rescue', 4, () => G.genRescue(rng), () => ({ ai: 'brutal', goal: { type: 'promote', n: 2 } }));
 add('weekly', 6, () => G.genTwoMover(rng, true), () => ({ ai: 'brutal', goal: { type: 'king', n: 2 } }));
 

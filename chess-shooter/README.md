@@ -18,9 +18,11 @@ Open `index.html` at the repo root. It's the whole game in one self-contained fi
     clip pieces in between.
   - **King**: the 8 squares around it.
   - **Rook / bishop / queen**: along their lines, half their movement (4 squares). The line must be clear.
-- You can **miss**. Each gun has some wobble, so long shots miss more. Bullets are real rays: they hit
-  the first thing in their path (even your own pieces), fly over short pieces, or hit the floor. Hovering
-  a target shows its hit chance.
+- Shooting is **exact, not random**: a bullet flies in a straight line to exactly where you aim. Bullets
+  are real rays: they hit the first thing in their path (even your own pieces), fly over short pieces, or
+  hit the floor. So a shot misses only if something is in the way, the wind pushes it, or (in first
+  person) you aim off the target. Hovering a target tells you exactly what the shot will do: "Clean shot",
+  "Hits the pawn on d4", "Blocked by a crate" or "Misses".
 - Castling and promotion work as in chess (no en passant: pawns don't capture by moving).
 - **Classic**: kings are bulletproof (shots ricochet). Check means the king is inside an enemy gun's
   reach, you can't leave your king in check, and checkmate (the siege) wins. Stalemate is a draw.
@@ -61,12 +63,14 @@ Title screen → main menu (Play vs Computer, Pass & Play, How to Play, Settings
 difficulty, your side). <kbd>Esc</kbd> pauses (resume, restart, settings, quit). Settings: music and
 effects volume, look sensitivity, field-of-fire tint, control hints. Choices are remembered.
 
-| Level | Aim | Thinking |
-| --- | --- | --- |
-| ★ Recruit | shaky (1.6× wobble) | judges only its own move, blunders 1 in 4 turns |
-| ★★ Soldier | decent (1.12×) | considers your best reply |
-| ★★★ Sniper | steady (0.92×) | considers your best reply, no randomness |
-| ★★★★ Warlord | deadly (0.8×) | three plies: its move, your reply, its answer |
+Every level shoots exactly; they differ in how well they think:
+
+| Level | Thinking |
+| --- | --- |
+| ★ Recruit | judges only its own move, blunders 1 in 4 turns |
+| ★★ Soldier | considers your best reply, careless 1 in 10 turns |
+| ★★★ Sniper | considers your best reply, never careless |
+| ★★★★ Warlord | three plies: its move, your reply, its answer |
 
 You can play White, Black, or let a coin toss decide.
 
@@ -133,21 +137,20 @@ they pay star XP, not normal victory or kill XP.
 
 | Pack | Puzzles | Goal |
 | --- | --- | --- |
-| Basic Training | 8 | Find the one piece that can shoot the king (sure-shot) |
-| Two-Movers | 8 | Shoot the king in 2 turns against perfect defence (sure-shot) |
+| Basic Training | 8 | Find the one piece that can shoot the king |
+| Two-Movers | 8 | Shoot the king in 2 turns against perfect defence |
 | Trick Shots | 6 | A crate blocks the straight shot: look through the knight and click the exact spot (aim high or at the edge) |
-| Survival | 5 | Your king is in the line of fire: survive 2 enemy turns (sure-shot) |
-| Odds | 5 | Shots can miss: take the shot with the best hit chance |
-| Rescue | 4 | Promote a pawn within 2 turns, under fire (sure-shot) |
+| Survival | 5 | Your king is in the line of fire: survive 2 enemy turns |
+| Crosswind | 5 | Wind pushes the bullet off the target: look through the shooter and aim upwind |
+| Rescue | 4 | Promote a pawn within 2 turns, under fire |
 | Fog | 4 | Fog of War: scout, then shoot the king |
 
-- **Sure-shot** means shots never miss, so it's pure logic.
 - **Hints** (💡 in the top bar, 25 XP each): the first shows the piece, the second the target (for trick
-  shots, the exact spot to click). Using one caps that puzzle at ★★.
+  shots and crosswinds, the exact spot to click). Using one caps that puzzle at ★★.
 - **Puzzle of the week:** a hard two-mover, 200 XP once a week.
 - **Puzzle Rush:** 3 minutes, 3 strikes, endless generated puzzles ("shoot the king", "shoot the most
   valuable piece"). 10 XP per solve; best score saved.
-- **Editor:** place pieces and crates, choose rules, goal, turns, opponent and sure-shot, test it, then
+- **Editor:** place pieces and crates, choose rules, goal, turns and opponent, test it, then
   **Make code** to get a `GM1-…` code. Anyone can paste it in **Play a code**.
 
 ## Secrets
@@ -173,14 +176,14 @@ In game setup (vs computer or Pass & Play), any of these turn off the leaderboar
 - **Cover:** six crates, mirrored between the halves. They block moves, lines of fire, sight and bullets.
 - **Tactics:** once per game each, a **rook can go on overwatch** (spends your turn; the first enemy that
   moves into its line gets shot at automatically before the turn passes) and a **bishop can throw
-  smoke** onto a square on its diagonals (shots through the 3×3 cloud wobble far more for two turns each).
+  smoke** onto a square on its diagonals (nobody can shoot into or through the 3×3 cloud for two turns each).
   Use them from the piece card. The computer can use them too.
 - **Weather:** wind (30–54 km/h, pushes bullets sideways; an arrow shows its direction relative to your
-  view) or rain (more wobble, darker light).
+  view) or rain (rooks, bishops and queens shoot a square less; darker light).
 
 Also:
-- **Sniper scope** (<kbd>Z</kbd>, right-click or the ⌖ button): zoom in, fire at the centre of the sights with
-  steadier aim than hip fire. The sights sway; hold <kbd>Shift</kbd> to hold your breath for a moment.
+- **Sniper scope** (<kbd>Z</kbd>, right-click or the ⌖ button): zoom in for precise aiming; the
+  bullet goes exactly to the centre of the sights. The sights sway; hold <kbd>Shift</kbd> to hold your breath.
 - **Replays:** after any game, **Replay game** plays it back from the overview (pause, 1×/2×/4×, stop), and
   **Best shot** replays your most impressive kill through the kill-cam.
 
@@ -192,8 +195,8 @@ Main menu → **Challenges**:
   within 6 turns". 120 XP, +20 for every day of your solving streak (up to +120). Retry as often as you
   like; it pays once a day.
 - **Weekly challenge:** MerciZero against Soldier with a rule twist that changes every Monday: Long
-  Guns (sliders shoot their full movement), Steady Hands (half the wobble), Shell Shock (60% more
-  wobble), Pawn Shotguns (pawns also shoot 2 squares ahead), Royal Guard (kings shoot 2 squares) or
+  Guns (sliders shoot their full movement), Gale Force (strong wind all game), Downpour (rain: sliders
+  shoot a square less), Pawn Shotguns (pawns also shoot 2 squares ahead), Royal Guard (kings shoot 2 squares) or
   Close Quarters (sliders shoot only 2). First win of the week: 300 XP.
 - **Gauntlet:** beat Recruit, Soldier, Sniper and Warlord in a row. Pieces you lose stay lost for the
   next round. 80 / 150 / 250 / 400 XP per round; your best run is saved.
@@ -231,7 +234,7 @@ Previews you don't buy are undone when you leave. Some premium skins also need a
 Two shop badges: Fashionista (first purchase) and Collector (own 10 skins).
 
 Badges: First Blood, Pawn Power, Royal Revolver, Cavalry Charge (3 knight kills in a game), Max Range
-(kill from 4 squares), Long Shot (kill under 50% hit chance), Queenslayer, Lucky Stray, Oops (friendly
+(kill from 4 squares), Into the Wind (land a kill in a crosswind), Queenslayer, Lucky Stray, Oops (friendly
 fire), Bulletproof (ricochet off a king), Stormtrooper (4 misses in a row), Field Promotion, Castle
 Keep, Siege Master, Regicide, Untouchable (win losing nothing), Deadeye (win with 100% accuracy),
 Comeback Kid (win from 5+ material down), Blitz (win in 20 turns), one for beating each difficulty,
@@ -267,7 +270,7 @@ and bass on the menu, adds drums, an arpeggio and a melody once the battle start
 ```
 dev.html          Vite entry
 src/rules.js      pure rules: moves, gun reach, check, ballistics (runs in Node)
-src/ai.js         computer opponent: 1-3 ply expectimax by difficulty, aware of hit chance
+src/ai.js         computer opponent: 1-3 ply search by difficulty
 src/main.js       renderer, POV/overview camera, input, turn flow, HUD
 src/pieces.js     low-poly pieces and their guns
 src/world.js      board, plateau, trees, rocks, lights

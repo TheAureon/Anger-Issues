@@ -67,7 +67,7 @@ for (const mode of [R.CLASSIC, R.MERCIZERO]) {
   ok(P.levelOf(0) === 1 && P.levelOf(99) === 1 && P.levelOf(100) === 2 && P.levelOf(300) === 3, 'level thresholds 0/100/300');
   pr.beginGame({ vsAI: true, human: 'w', difficulty: 'hard', mode: R.MERCIZERO });
   const pawn = { type: 'p', color: 'b' }, queen = { type: 'q', color: 'b' };
-  pr.onShot({ mine: true, shooterType: 'r', intended: 10, victim: queen, victimSq: 10, distance: 4, chance: 0.4 });
+  pr.onShot({ mine: true, shooterType: 'r', intended: 10, victim: queen, victimSq: 10, distance: 4, chance: 1, windy: true });
   const got = new Set(events.filter((e) => e.type === 'badge').map((e) => e.badge.id));
   ok(['first-blood', 'max-range', 'long-shot', 'queenslayer'].every((b) => got.has(b)) && !got.has('stray'), 'kill badges: ' + [...got].join(','));
   for (let i = 0; i < 4; i++) pr.onShot({ mine: true, shooterType: 'p', intended: 3, victim: null, victimSq: null, distance: 1, chance: 0.9 });
@@ -215,10 +215,17 @@ for (const mode of [R.CLASSIC, R.MERCIZERO]) {
   const blocked = R.simulateShot({ ...g2, cover: [at('a3')] }, at('a1'), R.aimCenter(g2, at('a4')), R.mulberry(1), 0.01);
   ok(blocked.hit == null && blocked.cover === at('a3'), 'bullets stop at crates');
   // Smoke and wind
-  const base = R.hitChance(g2, at('a1'), at('a4'));
-  const smoked = R.hitChance({ ...g2, smoke: [{ sq: at('a3'), until: 99 }] }, at('a1'), at('a4'));
-  const windy = R.hitChance({ ...g2, weather: { wind: { x: 0.07, z: 0 }, kph: 42 } }, at('a1'), at('a4'));
-  ok(smoked < base - 0.15 && windy < base - 0.15, `smoke and crosswind lower the odds (${(base * 100) | 0}% → smoke ${(smoked * 100) | 0}%, wind ${(windy * 100) | 0}%)`);
+  // Deterministic shots
+  const s1 = R.simulateShot(g2, at('a1'), R.aimCenter(g2, at('a4')));
+  const s2 = R.simulateShot(g2, at('a1'), R.aimCenter(g2, at('a4')));
+  ok(s1.hit === at('a4') && s1.end.x === s2.end.x && s1.end.z === s2.end.z && R.hitChance(g2, at('a1'), at('a4')) === 1, 'shots are exact: the same shot always lands the same way');
+  ok(!R.isTargetable({ ...g2, smoke: [{ sq: at('a3'), until: 99 }] }, at('a1'), at('a4')) && R.isTargetable(g2, at('a1'), at('a4')), 'smoke blocks shots through the cloud');
+  const gw = { ...g2, board: g2.board.map((q) => q && { ...q }) };
+  gw.board[at('a4')] = null; gw.board[at('a5')] = { id: 2, type: 'p', color: 'b' };
+  gw.weather = { wind: { x: 0.08, z: 0 }, kph: 48 };
+  const G0 = await import('../chess-shooter/src/puzzlegen.js');
+  ok(R.simulateShot(gw, at('a1'), R.aimCenter(gw, at('a5'))).hit !== at('a5') && G0.aimWindow(gw, at('a1'), at('a5')).frac > 0, 'a crosswind pushes a centre shot off; aiming upwind lands it');
+  ok(R.isTargetable(g2, at('a1'), at('a4')) && !R.isTargetable({ ...gw, weather: { rain: true } }, at('a1'), at('a5')), 'rain cuts slider range by a square');
   // Abilities
   let t = { ...R.newGame(R.MERCIZERO), tactics: true };
   t.board[at('a2')] = null; t.board[at('a7')] = null;
@@ -240,6 +247,11 @@ for (const mode of [R.CLASSIC, R.MERCIZERO]) {
     if (p.cover) st.cover = p.cover.map(sqOf);
     if (p.pack === 'basic' && !G.kingShotNow(st)) bad.push(p.id);
     if (p.pack === 'two' && !G.forcedKingIn2(st)) bad.push(p.id);
+    if (p.pack === 'wind') {
+      st.weather = p.weather;
+      const f = sqOf(p.hint.from), t = sqOf(p.hint.to);
+      if (R.simulateShot(st, f, R.aimCenter(st, t)).hit === t || R.simulateShot(st, f, p.aim).hit !== t) bad.push(p.id);
+    }
     if (p.pack === 'trick') {
       const w = G.aimWindow(st, sqOf(p.hint.from), sqOf(p.hint.to));
       if (!(w.frac > 0) || R.simulateShot(st, sqOf(p.hint.from), R.aimCenter(st, sqOf(p.hint.to)), Math.random, 1).hit === sqOf(p.hint.to)) bad.push(p.id);

@@ -604,7 +604,7 @@ function refresh() {
   if (extras.length) tag += ' · ' + extras.join(' · ');
   if (battle) {
     tag = battle.kind ? `${battle.name} · ${MODE_LABEL[st.mode]}` : `Campaign · ${battle.name} · ${MODE_LABEL[st.mode]}`;
-    if (battle.goal) tag = `${battle.name} · ${goalText(battle.goal, st)}${st.rules && st.rules.spreadMul === 0 ? ' · sure-shot' : ''}`;
+    if (battle.goal) tag = `${battle.name} · ${goalText(battle.goal, st)}${st.weather && st.weather.wind ? ' · wind' : ''}`;
     if (battle.kind === 'rush') tag = `Puzzle Rush · ${battle.prompt}`;
     if (battle.turnLimit) {
       const left = Math.max(0, battle.turnLimit - myTurnsSoFar());
@@ -670,6 +670,19 @@ function drawMap() {
 // --- Hover tooltips ------------------------------------------------------------------------
 
 let chanceCache = { key: '', v: 0 };
+// Shots are exact, so we can say precisely what a shot will do.
+function shotPreview(from, to, aim, spreadMul = 1) {
+  const res = R.simulateShot(st, from, aim, Math.random, spreadMul);
+  if (res.hit === to) return { ok: true, label: 'Clean shot' };
+  const windy = st.weather && st.weather.wind;
+  if (res.hit != null) {
+    const q = st.board[res.hit];
+    return { ok: false, label: `Hits the ${R.NAMES[q.type].toLowerCase()} on ${R.sqName(res.hit)}${q.color === st.board[from].color ? ' (yours!)' : ''}` };
+  }
+  if (res.cover != null) return { ok: false, label: 'Blocked by a crate' };
+  return { ok: false, label: windy ? 'Misses: the wind pushes it' : 'Misses' };
+}
+
 function updateHover() {
   const tip = $('tip');
   hoverRing.visible = false;
@@ -693,8 +706,9 @@ function updateHover() {
   } else if (current.targets.includes(s)) {
     const aim = !hover.fromMap && viewMode === 'pov' && hover.point && hover.pointPiece ? hover.point : R.aimCenter(st, s);
     const key = `${from}-${s}-${aim.x.toFixed(2)}-${aim.y.toFixed(2)}-${aim.z.toFixed(2)}`;
-    if (chanceCache.key !== key) chanceCache = { key, v: R.hitChance(st, from, s, aim, 220) };
-    text = `${icon('target')}Shoot ${R.NAMES[p.type].toLowerCase()} <b class="pct">${Math.round(chanceCache.v * 100)}%</b>`;
+    if (chanceCache.key !== key) chanceCache = { key, v: shotPreview(from, s, aim) };
+    const pv = chanceCache.v;
+    text = `${icon('target')}Shoot ${R.NAMES[p.type].toLowerCase()} <b class="pct ${pv.ok ? 'ok' : 'bad'}">${pv.ok ? '✓ ' : '✗ '}${pv.label}</b>`;
     cls = 'shoot';
     canvas.style.cursor = 'crosshair';
   } else if (p && from >= 0 && humanTurn() && !busy && p.color !== st.board[from].color) {
@@ -904,6 +918,7 @@ async function doShoot(a, aim, spreadMul, mine = false, opts = {}) {
     ricochet: !!hitPiece && hitPiece.type === 'k' && st.mode === R.CLASSIC,
     distance: Math.max(Math.abs(R.fileOf(a.to) - R.fileOf(a.from)), Math.abs(R.rankOf(a.to) - R.rankOf(a.from))),
     chance,
+    windy: !!(st.weather && st.weather.wind),
   });
   if (res.hit != null) {
     const victim = st.board[res.hit];
@@ -1169,7 +1184,7 @@ async function doAbility(a, byHuman) {
     scene.remove(ball);
     sfx.thud();
     fx.dust(to, 10);
-    status(`Smoke! Shots through the cloud on ${R.sqName(a.to)} wobble far more.`, 'warn');
+    status(`Smoke on ${R.sqName(a.to)}! Nobody can shoot into or through the cloud for two turns.`, 'warn');
   }
   if (tok !== gameToken) return;
   commit(R.applyRaw(st, a), { squares: new Set([a.from]), desc: a.kind === 'overwatch' ? `${playerName(p.color)} put a rook on overwatch.` : `${playerName(p.color)} threw smoke onto ${R.sqName(a.to)}.`, action: a, by: byHuman ? 'human' : 'ai' }, tok);
@@ -1324,6 +1339,7 @@ function startGame(b = null) {
     if (b.rules) st.rules = { ...b.rules };
     if (b.sure) st.rules = { ...R.rulesOf(st), spreadMul: 0 };
     if (b.cover) st.cover = [...b.cover];
+    if (b.weather) st.weather = { ...b.weather };
     if (b.goal && b.goal.type === 'kill') {
       const t = st.board[parseSq(b.goal.target)];
       b.targetId = t ? t.id : -1;
@@ -1382,8 +1398,8 @@ function startGame(b = null) {
   showScreen('game');
   if (b && b.kind === 'rush') viewMode = 'over';
   setPov(remembered[viewerColor()], { stay: !!(b && b.kind === 'rush') });
-  if (b && b.puzzle && b.puzzle.pack === 'trick' && b.hint) {
-    // Trick shots are about aiming in first person: start in the shooter's eyes, facing the target.
+  if (b && b.puzzle && b.puzzle.aim && b.hint) {
+    // Trick shots and crosswinds are about aiming in first person: start in the shooter's eyes, facing the target.
     const fs = parseSq(b.hint.from);
     const ts = parseSq(b.hint.to);
     setPov(st.board[fs].id);
@@ -2159,7 +2175,6 @@ function openBriefing(b) {
   $('br-foe').textContent = `Opponent: ${b.foe}`;
   const base = typeof b.ai === 'object' ? b.ai.base : b.ai;
   const tags = [MODE_LABEL[b.mode], `${DIFFICULTIES[base].label} AI`];
-  if (typeof b.ai === 'object' && b.ai.aim) tags.push('Sharpshooter');
   if (b.turnLimit) tags.push(`${b.turnLimit}-turn deadline`);
   $('br-tags').innerHTML = tags.map((t) => `<span class="tag">${t}</span>`).join('');
   $('br-blurb').textContent = b.blurb;
@@ -2582,10 +2597,10 @@ function renderPuzzles() {
   const wp = weeklyPuzzle(wk);
   const wDone = progress.p.wpuzzle === wk;
   $('pz-weekly').innerHTML = `<div class="ch-top"><span class="ch-kicker">Puzzle of the week</span><span class="ch-time">${untilWeekEnd()} left</span></div>
-    <b class="ch-name">${goalText(wp.goal)}</b><p>A hard two-mover: sure-shot, and the enemy defends perfectly.</p>
+    <b class="ch-name">${goalText(wp.goal)}</b><p>A hard two-mover: the enemy defends perfectly.</p>
     <div class="ch-reward">${wDone ? '✓ Solved this week' : `+${WEEKLY_PUZZLE_XP} XP`}</div><button class="primary" data-pz="weekly">Solve</button>`;
   $('pz-rush').innerHTML = `<div class="ch-top"><span class="ch-kicker">Puzzle Rush</span><span class="ch-time">Best ${progress.p.rush.best}</span></div>
-    <b class="ch-name">3 minutes, 3 strikes</b><p>Quick sure-shot puzzles, one after another. Find the shot fast.</p>
+    <b class="ch-name">3 minutes, 3 strikes</b><p>Quick puzzles, one after another. Find the shot fast.</p>
     <div class="ch-reward">+10 XP per puzzle solved</div><button class="primary" data-pz="rush">Start</button>`;
   $('pz-editor').innerHTML = `<div class="ch-top"><span class="ch-kicker">Puzzle editor</span></div>
     <b class="ch-name">Make your own</b><p>Set up a position, pick a goal, test it, and share it as a code.</p>
@@ -2676,7 +2691,7 @@ function edPlacement() {
 function edPuzzle() {
   const goal = { type: $('ed-goal').value, n: Math.max(1, Math.min(30, +$('ed-n').value || 1)) };
   if (goal.type === 'kill') goal.target = ed.target >= 0 ? R.sqName(ed.target) : '';
-  return { id: 'test', pack: null, placement: edPlacement(), mode: $('ed-mode').value, sure: $('ed-sure').checked, cover: [...ed.cover].map(R.sqName), goal, ai: $('ed-ai').value, title: $('ed-title').value.trim().slice(0, 40) || 'Custom puzzle' };
+  return { id: 'test', pack: null, placement: edPlacement(), mode: $('ed-mode').value, sure: true, cover: [...ed.cover].map(R.sqName), goal, ai: $('ed-ai').value, title: $('ed-title').value.trim().slice(0, 40) || 'Custom puzzle' };
 }
 function edLoad(p) {
   const s0 = R.fromPlacement(p.placement, p.mode);
@@ -2687,7 +2702,6 @@ function edLoad(p) {
   $('ed-goal').value = p.goal.type;
   $('ed-n').value = p.goal.n;
   $('ed-ai').value = p.ai;
-  $('ed-sure').checked = !!p.sure;
   $('ed-title').value = p.title || '';
 }
 function edCheck() {
@@ -2868,7 +2882,9 @@ function updateScope(dt, time) {
     const r = canvas.getBoundingClientRect();
     const h = pick(r.left + r.width / 2, r.top + r.height / 2);
     const tgt = h && h.piece && current.targets.includes(h.sq);
-    $('scope-chance').textContent = tgt ? `${Math.round(R.hitChance(st, sqOfId(povId), h.sq, h.point, 120, SCOPE_SPREAD) * 100)}%` : '';
+    const pv = tgt ? shotPreview(sqOfId(povId), h.sq, h.point, SCOPE_SPREAD) : null;
+    $('scope-chance').textContent = pv ? (pv.ok ? '✓ Clean shot' : `✗ ${pv.label}`) : '';
+    $('scope').classList.toggle('clean', !!(pv && pv.ok));
     $('scope').classList.toggle('on-target', !!tgt);
     $('scope').style.setProperty('--breath', breath.toFixed(2));
   }

@@ -28,8 +28,8 @@ export const PUZZLE_XP = 120;
 // One rule twist per week, played as MerciZero against Soldier. First win of the week pays big.
 export const WEEKLY_RULES = [
   { id: 'long-guns', name: 'Long Guns', desc: 'Rooks, bishops and queens shoot their full movement, not half.', rules: { sliderRange: 7 } },
-  { id: 'steady', name: 'Steady Hands', desc: 'Every gun wobbles half as much. Long shots land.', rules: { spreadMul: 0.5 } },
-  { id: 'shell-shock', name: 'Shell Shock', desc: 'Every gun wobbles 60% more. Get close.', rules: { spreadMul: 1.6 } },
+  { id: 'gale', name: 'Gale Force', desc: 'A strong wind blows all game. Aim upwind on long shots.', rules: {}, weather: { wind: { x: 0.085, z: 0.03 }, kph: 54 } },
+  { id: 'downpour', name: 'Downpour', desc: 'Heavy rain: rooks, bishops and queens shoot a square less.', rules: {}, weather: { rain: true } },
   { id: 'shotguns', name: 'Pawn Shotguns', desc: 'Pawns also shoot up to 2 squares straight ahead.', rules: { pawnForward: 2 } },
   { id: 'royal-guard', name: 'Royal Guard', desc: 'Kings shoot up to 2 squares along every line.', rules: { kingRange: 2 } },
   { id: 'close-quarters', name: 'Close Quarters', desc: 'Rooks, bishops and queens shoot only 2 squares.', rules: { sliderRange: 2 } },
@@ -53,7 +53,7 @@ export function weeklyBattle(wk) {
   const w = weeklyFor(wk);
   return {
     kind: 'weekly', id: `weekly-${wk}`, name: `Weekly: ${w.name}`, foe: 'Soldier', mode: MERCIZERO, ai: 'normal',
-    placement: STD, rules: { ...DEFAULT_RULES, ...w.rules }, blurb: w.desc, week: wk,
+    placement: STD, rules: { ...DEFAULT_RULES, ...w.rules }, weather: w.weather || null, blurb: w.desc, week: wk,
   };
 }
 export function puzzleBattle(day) {

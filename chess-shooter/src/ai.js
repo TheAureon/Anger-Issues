@@ -1,18 +1,18 @@
 // Computer opponent: expectimax search (1-3 plies by difficulty) that knows shots can miss.
 import {
-  CLASSIC, FOG, DIMS, SPREAD, VALUE, applyRaw, aimCenter, findKing, gunReaches, hitChance, inCheck, hiddenEnemySquares,
+  CLASSIC, FOG, DIMS, SPREAD, VALUE, simulateShot, applyRaw, aimCenter, findKing, gunReaches, hitChance, inCheck, hiddenEnemySquares,
   legalActions, other, pseudoShots, rankOf, fileOf, toWorld,
 } from './rules.js';
 
 export const AI_SPREAD = 1.12; // default aim wobble multiplier (Soldier)
 
-// Difficulty levels: aim = wobble multiplier on every shot, depth = plies searched,
+// Difficulty levels: depth = plies searched (aim is kept for rule sets with wobble; shots are exact),
 // blunder = chance of a random action, noise = randomness added to each action's score.
 export const DIFFICULTIES = {
-  easy: { label: 'Recruit', blurb: 'Shaky aim, short-sighted, makes mistakes.', aim: 1.6, depth: 1, blunder: 0.25, noise: 1.0 },
-  normal: { label: 'Soldier', blurb: 'Decent shot. Thinks one reply ahead.', aim: 1.12, depth: 2, blunder: 0, noise: 0.08 },
-  hard: { label: 'Sniper', blurb: 'Steady hands. Punishes loose pieces.', aim: 0.92, depth: 2, blunder: 0, noise: 0.02 },
-  brutal: { label: 'Warlord', blurb: 'Deadly aim. Plans two moves deep.', aim: 0.8, depth: 3, blunder: 0, noise: 0.01 },
+  easy: { label: 'Recruit', blurb: 'Short-sighted and careless: blunders often.', aim: 1.6, depth: 1, blunder: 0.25, noise: 1.0 },
+  normal: { label: 'Soldier', blurb: 'Thinks one reply ahead, sometimes careless.', aim: 1.12, depth: 2, blunder: 0.1, noise: 0.35 },
+  hard: { label: 'Sniper', blurb: 'Thinks one reply ahead, never careless.', aim: 0.92, depth: 2, blunder: 0, noise: 0.02 },
+  brutal: { label: 'Warlord', blurb: 'Plans two moves deep.', aim: 0.8, depth: 3, blunder: 0, noise: 0.01 },
 };
 
 const KING_VALUE = 60; // MerciZero only: losing the king loses the game
@@ -21,24 +21,9 @@ function pieceValue(st, p) {
   return p.type === 'k' ? (st.mode === CLASSIC ? 0 : KING_VALUE) : VALUE[p.type];
 }
 
-// Normal CDF approximation, for quick hit odds deep in the search.
-function phi(x) {
-  const t = 1 / (1 + 0.2316419 * Math.abs(x));
-  const d = 0.3989423 * Math.exp((-x * x) / 2);
-  const p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
-  return x > 0 ? 1 - p : p;
-}
-function approxHit(st, a, aim = AI_SPREAD) {
-  const shooter = st.board[a.from];
-  const target = st.board[a.to];
-  const A = toWorld(a.from);
-  const B = toWorld(a.to);
-  const dist = Math.max(0.5, Math.hypot(A.x - B.x, A.z - B.z) - 0.3);
-  const sig = SPREAD[shooter.type] * aim * (st.rules ? st.rules.spreadMul : 1);
-  const dm = DIMS[target.type];
-  const wx = Math.atan(dm.r / dist) / sig;
-  const wy = Math.atan((dm.h * 0.45) / dist) / sig;
-  return (2 * phi(wx) - 1) * (2 * phi(wy) - 1);
+// Shots are deterministic: a shot lands if its straight line reaches the target first.
+function approxHit(st, a) {
+  return simulateShot(st, a.from, aimCenter(st, a.to), Math.random, 1).hit === a.to ? 1 : 0;
 }
 
 function evaluate(st, me) {

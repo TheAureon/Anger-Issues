@@ -44,7 +44,7 @@ export const BADGES = [
   { id: 'revolver', icon: '👑', name: 'Royal Revolver', desc: 'Kill a piece with your king.' },
   { id: 'cavalry', icon: '🐴', name: 'Cavalry Charge', desc: 'Get 3 knight kills in one game.' },
   { id: 'max-range', icon: '🎯', name: 'Max Range', desc: 'Kill from 4 squares away, the edge of a slider’s range.' },
-  { id: 'long-shot', icon: '🍀', name: 'Long Shot', desc: 'Land a kill that had under 50% hit chance.' },
+  { id: 'long-shot', icon: '🌬️', name: 'Into the Wind', desc: 'Land a kill in a crosswind.' },
   { id: 'queenslayer', icon: '♛', name: 'Queenslayer', desc: 'Shoot down the enemy queen.' },
   { id: 'stray', icon: '🎱', name: 'Lucky Stray', desc: 'Miss your target but kill a different enemy.' },
   { id: 'oops', icon: '🤦', name: 'Oops', desc: 'Shoot one of your own pieces.' },
@@ -445,7 +445,7 @@ export class Progress {
   }
 
   // `mine`: the shot was fired by a human player (always true in Pass & Play).
-  onShot({ mine, shooterType, intended, victim, victimSq, friendly, ricochet, distance, chance }) {
+  onShot({ mine, shooterType, intended, victim, victimSq, friendly, ricochet, distance, chance, windy }) {
     const g = this.game;
     if (!g) return;
     if (!mine) {
@@ -497,7 +497,7 @@ export class Progress {
     if (shooterType === 'k') this.unlock('revolver');
     if (shooterType === 'n' && ++g.knightKills >= 3) this.unlock('cavalry');
     if (distance >= 4 && ['r', 'b', 'q'].includes(shooterType)) this.unlock('max-range');
-    if (victimSq === intended && chance < 0.5) this.unlock('long-shot');
+    if (windy) this.unlock('long-shot');
     if (victim.type === 'q') this.unlock('queenslayer');
     if (victimSq !== intended) this.unlock('stray');
     this.bumpContracts('kill', { shooterType, victim, distance, chance, aimed: victimSq === intended });
@@ -591,7 +591,7 @@ export const CONTRACTS = [
   { id: 'rook2', group: 'kill', text: 'Get 2 kills with rooks', goal: 2, xp: 70, kill: (k) => k.shooterType === 'r' },
   { id: 'bishop2', group: 'kill', text: 'Get 2 kills with bishops', goal: 2, xp: 70, kill: (k) => k.shooterType === 'b' },
   { id: 'long3', group: 'kill', text: 'Land 3 kills from 3+ squares away', goal: 3, xp: 80, kill: (k) => k.distance >= 3 },
-  { id: 'risky', group: 'kill', text: 'Land a kill that had under 50% hit chance', goal: 1, xp: 90, kill: (k) => k.aimed && k.chance < 0.5 },
+  { id: 'risky', group: 'kill', text: 'Land a kill from 4 squares away', goal: 1, xp: 90, kill: (k) => k.distance >= 4 },
   { id: 'queen', group: 'kill', text: 'Shoot down an enemy queen', goal: 1, xp: 80, kill: (k) => k.victim.type === 'q' },
   { id: 'kingkill', group: 'kill', text: 'Get a kill with your king', goal: 1, xp: 90, kill: (k) => k.shooterType === 'k' },
   { id: 'win', group: 'win', text: 'Win a game against the computer', goal: 1, xp: 100, win: () => true },

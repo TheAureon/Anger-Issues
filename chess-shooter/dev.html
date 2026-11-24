@@ -146,7 +146,7 @@
         <div class="variants">
           <label class="variant"><input type="checkbox" id="v-cover" /><span><b>📦 Cover</b><small>Six crates block moves, bullets and sight</small></span></label>
           <label class="variant"><input type="checkbox" id="v-tactics" /><span><b>🎖️ Tactics</b><small>Rook overwatch and bishop smoke, once each</small></span></label>
-          <label class="variant"><span><b>🌦️ Weather</b><small>Wind pushes bullets, rain adds wobble</small></span><select id="v-weather"><option value="clear">Clear</option><option value="wind">Wind</option><option value="rain">Rain</option></select></label>
+          <label class="variant"><span><b>🌦️ Weather</b><small>Wind pushes bullets, rain cuts long-gun range</small></span><select id="v-weather"><option value="clear">Clear</option><option value="wind">Wind</option><option value="rain">Rain</option></select></label>
         </div>
         <div id="local-options" class="hidden">
           <div class="row-label">Players</div>
@@ -227,7 +227,6 @@
             <label class="setting"><span>Goal</span><select id="ed-goal"><option value="king">Shoot the king</option><option value="kill">Kill the target</option><option value="survive">Survive</option><option value="promote">Promote a pawn</option></select></label>
             <label class="setting" id="ed-n-row"><span>Turns</span><input id="ed-n" type="number" min="1" max="30" value="2" class="text-in num" /></label>
             <label class="setting"><span>Opponent</span><select id="ed-ai"><option value="easy">Recruit</option><option value="normal" selected>Soldier</option><option value="hard">Sniper</option><option value="brutal">Warlord</option></select></label>
-            <label class="setting check"><span>Sure-shot<small>Shots never miss</small></span><input type="checkbox" id="ed-sure" checked /></label>
             <div class="err" id="ed-err"></div>
             <div class="ed-buttons">
               <button class="secondary slim" id="ed-standard">Start position</button>
@@ -364,7 +363,7 @@
           <li>Instead of capturing, you <b>shoot</b>. A kill doesn't move your piece.</li>
           <li>Each turn: <b>move OR shoot</b>, never both.</li>
           <li>Gun range: <b>pawn</b> = its two diagonal capture squares, <b>knight</b> = its L squares (the bullet flies straight), <b>king</b> = the 8 squares around it. <b>Rook, bishop, queen</b>: along their lines, up to 4 squares (half their movement), line must be clear.</li>
-          <li>You can <b>miss</b>. Bullets hit whatever is in their path first, even your own pieces.</li>
+          <li>Shots are <b>exact</b>: a bullet flies straight to where you aim. It misses only if something is in the way (it hits the first thing in its path, even your own pieces), the wind pushes it, or you aim off the target.</li>
           <li><b>Classic:</b> kings are bulletproof; checkmate (the siege) wins. <b>MerciZero:</b> shoot the king to win.</li>
         </ul>
         <h3>Controls</h3>
@@ -372,7 +371,7 @@
           <li>You start looking through your <b>king</b>. The board in the corner shows everything.</li>
           <li><b>Click one of your pieces</b> (in 3D or on the corner board) to jump into its point of view. <kbd>Q</kbd>/<kbd>E</kbd> cycle pieces.</li>
           <li><b>Green dots</b>: squares it can move to. Click one to move.</li>
-          <li><b>Red rings and diamonds</b>: enemies in its gun range. Click to shoot. The hit chance is shown on hover. In first person you aim where you click: centre mass is safest.</li>
+          <li><b>Red rings and diamonds</b>: enemies in its gun range. Click to shoot. Hovering shows exactly what the shot will do (a clean shot, or what gets in the way). In first person you aim exactly where you click.</li>
           <li><b>Drag</b> (or arrow keys / WASD) to look around. <b>Scroll</b> to zoom your sights. <kbd>V</kbd> toggles an overview camera. <kbd>M</kbd> toggles music.</li>
           <li>Red-tinted squares are the current piece's field of fire.</li>
         </ul>

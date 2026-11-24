@@ -3,16 +3,16 @@ import { MERCIZERO, FOG, CLASSIC, NAMES, sqAt, fromPlacement, findKing } from '.
 import { PUZZLE_DATA } from './puzzle-data.js';
 
 export const PACKS = [
-  { id: 'basic', name: 'Basic Training', icon: '🎯', blurb: 'Find the one piece that can shoot the king. Sure-shot: shots never miss.' },
-  { id: 'two', name: 'Two-Movers', icon: '♞', blurb: 'Set up, then fire. Shots never miss, and the enemy defends perfectly.' },
+  { id: 'basic', name: 'Basic Training', icon: '🎯', blurb: 'Find the one piece that can shoot the king.' },
+  { id: 'two', name: 'Two-Movers', icon: '♞', blurb: 'Set up, then fire. The enemy defends perfectly.' },
   { id: 'trick', name: 'Trick Shots', icon: '📦', blurb: 'A crate blocks the straight shot. Look through the shooter and click the exact spot: aim high or at the edge.' },
   { id: 'survive', name: 'Survival', icon: '🛡️', blurb: 'Your king is in the line of fire. Stay alive for 2 enemy turns.' },
-  { id: 'odds', name: 'Odds', icon: '🎲', blurb: 'Shots can miss here. Take the shot with the best chance: hover each one to compare.' },
+  { id: 'wind', name: 'Crosswind', icon: '🌬️', blurb: 'The wind pushes the bullet sideways. Look through the shooter and aim upwind of the target.' },
   { id: 'rescue', name: 'Rescue', icon: '⭐', blurb: 'Get a pawn to the last rank within 2 turns, under fire.' },
   { id: 'fog', name: 'Fog', icon: '🌫️', blurb: 'You can’t see the king. Scout with your moves, then shoot.' },
 ];
 
-// Hand-made Fog of War puzzles (normal wobble, so shots can miss).
+// Hand-made Fog of War puzzles.
 const FOG_PUZZLES = [
   { id: 'fog-1', pack: 'fog', placement: '6k1/5ppp/8/8/8/8/5PPP/3R2K1', mode: FOG, sure: false, ai: 'easy', goal: { type: 'king', n: 8 }, hint: { from: 'd1', to: 'd7' } },
   { id: 'fog-2', pack: 'fog', placement: 'k7/pp6/8/8/8/8/6PP/2Q3K1', mode: FOG, sure: false, ai: 'easy', goal: { type: 'king', n: 8 }, hint: { from: 'c1', to: 'c6' } },
@@ -61,6 +61,7 @@ export function puzzleToBattle(p, kind = 'library') {
     placement: p.placement,
     sure: !!p.sure,
     cover: p.cover ? p.cover.map(parseSq) : null,
+    weather: p.weather || null,
     goal: p.goal,
     hint: p.hint || null,
     turnLimit: p.goal.type === 'survive' ? 0 : p.goal.n,

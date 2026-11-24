@@ -23,7 +23,10 @@ export const MUZZLE = 0.55; // gun height as a fraction of piece height
 export const EYE = 0.9; // POV camera height as a fraction of piece height
 
 // Aim wobble per gun, as a standard deviation in radians (yaw and pitch each).
-export const SPREAD = { p: 0.085, n: 0.07, b: 0.065, r: 0.058, q: 0.06, k: 0.075 };
+// Shooting is deterministic: a bullet flies exactly where it's aimed. It misses only if something is
+// in the way (a piece, a crate), wind pushes it, or the aim point is off the target. (The wobble
+// machinery is kept, at zero, so a rule set could reintroduce it.)
+export const SPREAD = { p: 0, n: 0, b: 0, r: 0, q: 0, k: 0 };
 
 // Sliders shoot half their movement: 8 squares of travel, 4 of range.
 export const SLIDER_RANGE = 4;
@@ -31,6 +34,8 @@ export const SLIDER_RANGE = 4;
 // Rule modifiers (weekly challenges). A state may carry `rules`; anything missing uses these.
 export const DEFAULT_RULES = { sliderRange: SLIDER_RANGE, spreadMul: 1, pawnForward: 0, kingRange: 1 };
 export const rulesOf = (st) => (st && st.rules) || DEFAULT_RULES;
+// Rooks, bishops and queens: rain cuts their range by a square.
+export const sliderRangeOf = (st) => Math.max(1, rulesOf(st).sliderRange - (st && st.weather && st.weather.rain ? 1 : 0));
 const MAX_REACH = { p: Math.SQRT2, k: Math.SQRT2, n: Math.sqrt(5), r: 4, b: 4 * Math.SQRT2, q: 4 * Math.SQRT2 };
 
 export const WEAPON_TEXT = {
@@ -209,7 +214,7 @@ export function gunReaches(st, from, to) {
       if (p.type === 'b' && !diagonal) return false;
       if (p.type === 'q' && !straight && !diagonal) return false;
       const dist = Math.max(adf, adr);
-      if (dist > rulesOf(st).sliderRange) return false;
+      if (dist > sliderRangeOf(st)) return false;
       const sf = Math.sign(df);
       const sr = Math.sign(dr);
       for (let i = 1; i < dist; i++) if (occ(st, sqAt(fileOf(from) + sf * i, rankOf(from) + sr * i))) return false;
@@ -230,7 +235,10 @@ export function isTargetable(st, from, to) {
   const b = st.board[to];
   if (!a || !b || a.color === b.color) return false;
   if (b.type === 'k' && st.mode === CLASSIC) return false;
-  return gunReaches(st, from, to);
+  if (!gunReaches(st, from, to)) return false;
+  // Smoke: you can't shoot into the cloud or through it.
+  if (st.smoke && st.smoke.length && (smokeAt(st, to) || throughSmoke(st, muzzleOf(st, from, aimCenter(st, to)), aimCenter(st, to)))) return false;
+  return true;
 }
 
 export function pseudoShots(st, from) {
@@ -371,9 +379,9 @@ export function maxTravel(type, st = null) {
     ...MAX_REACH,
     p: Math.max(Math.SQRT2, r.pawnForward),
     k: r.kingRange * Math.SQRT2,
-    r: r.sliderRange,
-    b: r.sliderRange * Math.SQRT2,
-    q: r.sliderRange * Math.SQRT2,
+    r: sliderRangeOf(st),
+    b: sliderRangeOf(st) * Math.SQRT2,
+    q: sliderRangeOf(st) * Math.SQRT2,
   };
   return reach[type] + 0.45;
 }
@@ -381,7 +389,7 @@ export function maxTravel(type, st = null) {
 // Gun description for the HUD, reflecting any rule modifiers.
 export function weaponText(type, st = null) {
   const r = rulesOf(st);
-  const n = r.sliderRange;
+  const n = sliderRangeOf(st);
   const half = n === SLIDER_RANGE ? ' (half its movement)' : '';
   switch (type) {
     case 'p':
@@ -477,7 +485,7 @@ function gauss(rng) {
   return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * rng());
 }
 
-// Fire a bullet from `from` toward `aim` with the gun's wobble. The bullet hits the first thing in
+// Fire a bullet from `from` toward `aim` (pushed by any wind). The bullet hits the first thing in
 // its path: the target, a piece in between (either colour), the floor, or nothing (out of range).
 export function simulateShot(st, from, aim, rng = Math.random, spreadMul = 1) {
   const p = st.board[from];
@@ -487,8 +495,6 @@ export function simulateShot(st, from, aim, rng = Math.random, spreadMul = 1) {
   const dz = aim.z - o.z;
   let sigma = SPREAD[p.type] * spreadMul * rulesOf(st).spreadMul;
   const wx = st.weather || null;
-  if (wx && wx.rain) sigma *= 1.3;
-  if (st.smoke && st.smoke.length && throughSmoke(st, o, aim)) sigma *= 2.6;
   const yaw = Math.atan2(dx, dz) + gauss(rng) * sigma;
   const pitch = Math.atan2(dy, Math.hypot(dx, dz)) + gauss(rng) * sigma;
   const d = { x: Math.sin(yaw) * Math.cos(pitch), y: Math.sin(pitch), z: Math.cos(yaw) * Math.cos(pitch) };
@@ -535,6 +541,8 @@ export function mulberry(seed) {
 
 // Monte-Carlo chance that a shot aimed at `aim` actually kills the piece on `to`.
 export function hitChance(st, from, to, aim = aimCenter(st, to), samples = 240, spreadMul = 1) {
+  const p = st.board[from];
+  if (!(p && SPREAD[p.type] * spreadMul * rulesOf(st).spreadMul > 0)) samples = 1; // no wobble: one shot tells all
   const rng = mulberry(from * 131 + to * 7 + 1);
   let n = 0;
   for (let i = 0; i < samples; i++) if (simulateShot(st, from, aim, rng, spreadMul).hit === to) n++;
@@ -597,7 +605,7 @@ export function hiddenEnemySquares(st, color) {
 // --- Tactics: once-per-game abilities ---------------------------------------------------------
 // Rook OVERWATCH: spend your turn watching; the first enemy that moves into its line of fire gets
 // shot at automatically (until your next turn). Bishop SMOKE: throw a grenade onto a square on its
-// diagonals within range; bullets through the 3x3 cloud wobble far more, for two turns each side.
+// diagonals within range; nobody can shoot into or through the 3x3 cloud for two turns each side.
 
 export const SMOKE_TURNS = 5; // plies
 export function abilityActions(st, from) {
@@ -622,7 +630,7 @@ export function abilityActions(st, from) {
 export const smokeAt = (st, s) =>
   !!st.smoke && st.smoke.some((c) => Math.abs(fileOf(c.sq) - fileOf(s)) <= 1 && Math.abs(rankOf(c.sq) - rankOf(s)) <= 1);
 function throughSmoke(st, o, aim) {
-  for (let i = 1; i <= 12; i++) {
+  for (let i = 2; i <= 11; i++) {
     const k = i / 12;
     const s = worldToSq(o.x + (aim.x - o.x) * k, o.z + (aim.z - o.z) * k);
     if (s >= 0 && smokeAt(st, s)) return true;

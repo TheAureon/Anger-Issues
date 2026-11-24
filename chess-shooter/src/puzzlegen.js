@@ -293,25 +293,6 @@ export function genTrickShot(rng) {
   return null;
 }
 
-// Odds: several shots, one with clearly the best chance (normal wobble).
-export function genOdds(rng) {
-  for (let tries = 0; tries < 300; tries++) {
-    const st = randomPosition(rng, someOf(rng, ['q', 'r', 'b', 'n', 'p'], 4), someOf(rng, ['p', 'n', 'b', 'r', 'q'], 4), R.MERCIZERO, false);
-    const k = R.findKing(st, 'b');
-    const shots = [];
-    for (let s = 0; s < 64; s++) {
-      const p = st.board[s];
-      if (!p || p.color !== 'w') continue;
-      for (let t = 0; t < 64; t++) if (t !== k && R.isTargetable(st, s, t)) shots.push({ from: s, to: t, chance: R.hitChance(st, s, t, R.aimCenter(st, t), 160) });
-    }
-    if (shots.length < 3 || [...Array(64).keys()].some((s) => st.board[s] && st.board[s].color === 'w' && R.isTargetable(st, s, k))) continue;
-    shots.sort((a, b) => b.chance - a.chance);
-    if (shots[0].chance - shots[1].chance < 0.12 || shots[0].chance > 0.97) continue;
-    return { st, solution: { kind: 'shoot', from: shots[0].from, to: shots[0].to }, best: shots[0].chance };
-  }
-  return null;
-}
-
 export function genSurvival(rng) {
   for (let tries = 0; tries < 400; tries++) {
     const st = randomPosition(rng, someOf(rng, ['r', 'b', 'n', 'p'], 2), someOf(rng, ['q', 'r', 'b', 'n'], 2 + Math.floor(rng() * 2)));
@@ -336,6 +317,37 @@ export function genRescue(rng) {
     if (R.legalActions(st).length > 30) continue;
     const a = forcedPromotionIn2(st);
     if (a) return { st, solution: a };
+  }
+  return null;
+}
+
+// Crosswind: the wind drifts a long shot off the target; aim upwind to land it.
+export function genCrosswind(rng) {
+  const LINES = { r: [[1, 0], [-1, 0], [0, 1], [0, -1]], b: [[1, 1], [1, -1], [-1, 1], [-1, -1]] };
+  for (let tries = 0; tries < 3000; tries++) {
+    const st = R.newGame(R.MERCIZERO);
+    st.board = new Array(64).fill(null);
+    st.nextId = 1;
+    st.rules = { ...SURE_RULES };
+    const type = pick(rng, ['r', 'b', 'q']);
+    const from = Math.floor(rng() * 64);
+    const dirs = type === 'q' ? [...LINES.r, ...LINES.b] : LINES[type];
+    const [df, dr] = pick(rng, dirs);
+    const dist = 3 + Math.floor(rng() * 2);
+    const to = R.sqAt(R.fileOf(from) + df * dist, R.rankOf(from) + dr * dist);
+    if (to < 0 || from === to) continue;
+    st.board[from] = { id: st.nextId++, type, color: 'w', moved: true };
+    st.board[to] = { id: st.nextId++, type: pick(rng, ['n', 'b', 'r', 'q']), color: 'b', moved: true };
+    place(st, rng, 'w', 'k', (q) => R.rankOf(q) <= 1);
+    place(st, rng, 'b', 'k', (q) => R.rankOf(q) >= 6);
+    if (R.findKing(st, 'w') < 0 || R.findKing(st, 'b') < 0 || !R.isTargetable(st, from, to)) continue;
+    const a = rng() * Math.PI * 2;
+    const k = 0.06 + rng() * 0.04;
+    st.weather = { wind: { x: Math.cos(a) * k, z: Math.sin(a) * k }, kph: Math.round(k * 600) };
+    if (R.simulateShot(st, from, R.aimCenter(st, to), Math.random, 1).hit === to) continue;
+    const win = aimWindow(st, from, to);
+    if (win.frac < 0.05 || win.frac > 0.5) continue;
+    return { st, solution: { kind: 'shoot', from, to }, target: to, aim: win.best, window: win.frac };
   }
   return null;
 }
