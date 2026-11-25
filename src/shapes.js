@@ -18,6 +18,35 @@ const at = (m, x, y, z, rx = 0, ry = 0, rz = 0) => {
 };
 const dome = (r) => new THREE.SphereGeometry(r, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2);
 
+/** A low-poly sphere bent by fn(x, y, z) -> [x, y, z]. */
+function deform(fn, detail = 2) {
+  const g = new THREE.IcosahedronGeometry(0.12, detail);
+  const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const [x, y, z] = fn(p.getX(i), p.getY(i), p.getZ(i));
+    p.setXYZ(i, x, y, z);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+
+/** Where a head's surface is: front (at eye height), top, and side, read off its geometry. */
+function measure(g) {
+  const p = g.attributes.position;
+  let top = 0;
+  let side = 0;
+  let front = 0;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i);
+    const y = p.getY(i);
+    const z = p.getZ(i);
+    top = Math.max(top, y);
+    if (Math.abs(y - 0.01) < 0.045) side = Math.max(side, Math.abs(x));
+    if (Math.abs(x) < 0.05 && Math.abs(y - 0.024) < 0.05) front = Math.max(front, z);
+  }
+  return { top, side, front };
+}
+
 export const HEAD_SHAPES = {
   round: {
     name: 'Round',
@@ -59,7 +88,35 @@ export const HEAD_SHAPES = {
     side: 0.098,
     geo: () => geo('hs_can', () => new THREE.CylinderGeometry(0.105, 0.105, 0.24, 8).rotateY(Math.PI / 8)),
   },
+  pear: { name: 'Pear', icon: '🍐', auto: true, geo: () => geo('hs_pear', () => deform((x, y, z) => { const k = 1 + (-y / 0.13) * 0.28; return [x * 0.92 * k, y * 1.05, z * 0.95 * (1 + (-y / 0.13) * 0.12)]; })) },
+  acorn: { name: 'Acorn', icon: '🌰', auto: true, geo: () => geo('hs_acorn', () => deform((x, y, z) => { const k = y > 0 ? 1 - (y / 0.12) * 0.55 : 1; return [x * 0.92 * k, y > 0 ? y * 1.35 : y * 1.02, z * 0.96 * k]; })) },
+  long: { name: 'Long face', icon: '🐴', auto: true, geo: () => geo('hs_long', () => deform((x, y, z) => [x * 0.84, y < 0 ? y * 1.75 : y * 1.08, z * (y < 0 ? 0.92 : 0.95)])) },
+  // A prism has no vertices mid-face to measure, so its surface is given directly.
+  hex: { name: 'Hexagon', icon: '⬡', front: 0.097, top: 0.115, side: 0.104, geo: () => geo('hs_hex', () => new THREE.CylinderGeometry(0.112, 0.112, 0.23, 6).rotateY(Math.PI / 6)) },
+  pumpkin: {
+    name: 'Pumpkin',
+    icon: '🎃',
+    auto: true,
+    geo: () =>
+      geo('hs_pumpkin', () =>
+        deform((x, y, z) => {
+          const rib = 1 + 0.07 * Math.cos(8 * Math.atan2(x, z));
+          return [x * 1.05 * rib, y * 0.88, z * 1.0 * rib];
+        }, 3),
+      ),
+  },
+  jaw: { name: 'Jawline', icon: '🗿', auto: true, geo: () => geo('hs_jaw', () => deform((x, y, z) => (y < -0.02 ? [x * 1.12, y * 1.15, z * (z > 0 ? 1.12 : 0.95)] : [x * 0.9, y * 1.08, z * 0.96]))) },
+  alien: { name: 'Alien', icon: '👽', auto: true, geo: () => geo('hs_alien', () => deform((x, y, z) => (y > 0 ? [x * 1.18, y * 1.3, z * 1.12] : [x * 0.72 * (1 + y * 2), y * 1.1, z * 0.85]))) },
 };
+
+for (const hs of Object.values(HEAD_SHAPES)) {
+  if (!hs.auto) continue;
+  const m = measure(hs.geo());
+  // A touch inside the outermost vertex, so features sit on the faces rather than the corners.
+  hs.front = m.front * 0.97;
+  hs.top = m.top;
+  hs.side = m.side * 0.97;
+}
 
 const disc = (key, r) => geo(key, () => new THREE.CylinderGeometry(r, r, 0.012, 14).rotateX(Math.PI / 2));
 
@@ -198,6 +255,152 @@ export const HAIR = {
       }
       return out;
     },
+  },
+  pompadour: {
+    name: 'Pompadour',
+    icon: '🕺',
+    build: (m) => {
+      const quiff = mesh(new THREE.IcosahedronGeometry(0.07, 1), m);
+      quiff.scale.set(1.45, 0.85, 1.2);
+      return [cap(m), at(quiff, 0, 0.128, 0.055, -0.3)];
+    },
+  },
+  slick: {
+    name: 'Slicked back',
+    icon: '🕴️',
+    build: (m) => {
+      const d = mesh(dome(0.131), m);
+      d.scale.set(1, 0.78, 1.12);
+      d.position.set(0, 0.035, -0.012);
+      return [d, at(mesh(new THREE.BoxGeometry(0.16, 0.05, 0.04), m), 0, 0.02, -0.12, 0.3)];
+    },
+  },
+  curly: {
+    name: 'Curly',
+    icon: '🌀',
+    build: (m) => {
+      const out = [];
+      const g = new THREE.IcosahedronGeometry(0.036, 0);
+      for (let i = 0; i < 34; i++) {
+        const y = 1 - (i / 33) * 1.25;
+        const r = Math.sqrt(Math.max(0, 1 - y * y));
+        const a = i * 2.4;
+        const d = new THREE.Vector3(Math.cos(a) * r, y, Math.sin(a) * r);
+        if (d.z > 0.4 && d.y < 0.5) continue;
+        out.push(at(mesh(g, m), d.x * 0.125, d.y * 0.125 + 0.025, d.z * 0.125));
+      }
+      return out;
+    },
+  },
+  dreads: {
+    name: 'Dreadlocks',
+    icon: '🦁',
+    build: (m) => {
+      const out = [cap(m)];
+      const g = new THREE.CapsuleGeometry(0.016, 0.17, 2, 6);
+      for (let i = 0; i < 13; i++) {
+        const a = (0.3 + (i / 12) * 1.4) * Math.PI; // around the sides and back, not the face
+        const x = Math.sin(a) * 0.12;
+        const z = Math.cos(a) * 0.12;
+        const lock = mesh(g, m);
+        lock.position.set(x * 1.05, -0.06, z * 1.05);
+        lock.rotation.set(-z * 1.2, 0, x * 1.2);
+        out.push(lock);
+      }
+      return out;
+    },
+  },
+  braids: {
+    name: 'Braids',
+    icon: '🪢',
+    build: (m) => {
+      const out = [cap(m)];
+      const g = new THREE.IcosahedronGeometry(0.024, 0);
+      for (const s of [-1, 1]) {
+        for (let i = 0; i < 7; i++) out.push(at(mesh(g, m), s * (0.105 + i * 0.004), -0.02 - i * 0.036, 0.02 + i * 0.006));
+        out.push(at(mesh(new THREE.TorusGeometry(0.018, 0.007, 4, 8), mat(0xffd23f)), s * 0.13, -0.27, 0.06, Math.PI / 2));
+      }
+      return out;
+    },
+  },
+  emo: {
+    name: 'Emo fringe',
+    icon: '🖤',
+    // Swept across one eye, turned to follow the curve of the face.
+    build: (m) => [cap(m), at(mesh(new THREE.BoxGeometry(0.075, 0.12, 0.02), m), -0.038, 0.04, 0.106, -0.15, -0.4, -0.5)],
+  },
+  topknot: {
+    name: 'Top knot',
+    icon: '🥷',
+    build: (m) => {
+      const c = cap(m);
+      c.scale.y = 0.7;
+      return [c, at(mesh(new THREE.IcosahedronGeometry(0.038, 1), m), 0, 0.142, -0.015), at(mesh(new THREE.TorusGeometry(0.026, 0.008, 4, 10), mat(0xd62839)), 0, 0.118, -0.012, Math.PI / 2)];
+    },
+  },
+  mullet: {
+    name: 'Mullet',
+    icon: '🎸',
+    build: (m) => {
+      const out = [cap(m), at(mesh(new THREE.BoxGeometry(0.19, 0.17, 0.045), m), 0, -0.07, -0.1, 0.12)];
+      for (const s of [-1, 0, 1]) out.push(at(mesh(new THREE.ConeGeometry(0.025, 0.07, 4), m), s * 0.06, -0.17, -0.09, Math.PI - 0.3));
+      return out;
+    },
+  },
+  anime: {
+    name: 'Anime spikes',
+    icon: '🌟',
+    build: (m) => {
+      const out = [cap(m)];
+      const dirs = [[0, 1, 0.3], [0.6, 0.8, 0.1], [-0.6, 0.8, 0.1], [0.4, 0.6, -0.7], [-0.4, 0.6, -0.7], [0, 0.5, -1], [0.9, 0.3, -0.3], [-0.9, 0.3, -0.3], [0.2, 0.75, 0.6], [-0.25, 0.7, 0.6]];
+      for (const v of dirs) {
+        const d = new THREE.Vector3(...v).normalize();
+        const c = mesh(new THREE.ConeGeometry(0.045, 0.17, 5), m);
+        c.position.copy(d.clone().multiplyScalar(0.14));
+        c.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d);
+        out.push(c);
+      }
+      return out;
+    },
+  },
+  bob: {
+    name: 'Bob',
+    icon: '💁',
+    build: (m) => {
+      const d = mesh(dome(0.135), m);
+      d.position.y = 0.03;
+      return [
+        d,
+        at(mesh(new THREE.BoxGeometry(0.035, 0.16, 0.17), m), 0.113, -0.025, -0.015),
+        at(mesh(new THREE.BoxGeometry(0.035, 0.16, 0.17), m), -0.113, -0.025, -0.015),
+        at(mesh(new THREE.BoxGeometry(0.22, 0.16, 0.04), m), 0, -0.025, -0.11),
+        at(mesh(new THREE.BoxGeometry(0.19, 0.035, 0.03), m), 0, 0.065, 0.105),
+      ];
+    },
+  },
+  combover: {
+    name: 'Comb-over',
+    icon: '🧓',
+    build: (m) => {
+      const out = [];
+      // Thin strands arched over the scalp, combed across from one side.
+      for (let i = 0; i < 5; i++) {
+        const z = -0.06 + i * 0.03;
+        const r = Math.sqrt(Math.max(0.006, 0.131 * 0.131 - z * z));
+        out.push(at(mesh(new THREE.TorusGeometry(r, 0.006, 4, 14, Math.PI * 0.8), m), 0, 0.005, z, 0, 0, Math.PI * 0.12));
+      }
+      for (const s of [-1, 1]) {
+        const t = mesh(new THREE.IcosahedronGeometry(0.045, 1), m);
+        t.scale.set(0.6, 1, 1);
+        out.push(at(t, s * 0.1, 0.02, -0.03));
+      }
+      return out;
+    },
+  },
+  flattop: {
+    name: 'Flat top',
+    icon: '🟫',
+    build: (m) => [cap(m), at(mesh(new THREE.BoxGeometry(0.2, 0.08, 0.2), m), 0, 0.15, -0.005)],
   },
 };
 
@@ -430,7 +633,7 @@ export function styleMaterial(base, role, look) {
 function surfaceZ(shapeId, hs, x, y) {
   if (shapeId === 'square') return hs.front;
   const fx = Math.min(0.98, Math.abs(x) / hs.side);
-  if (shapeId === 'can') return hs.front * Math.sqrt(1 - fx * fx);
+  if (shapeId === 'can' || shapeId === 'hex') return hs.front * Math.sqrt(1 - fx * fx);
   const fy = Math.min(0.98, Math.abs(y) / hs.top);
   return hs.front * Math.sqrt(Math.max(0.05, 1 - fx * fx - fy * fy));
 }

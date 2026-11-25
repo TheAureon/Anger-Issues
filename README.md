@@ -112,13 +112,15 @@ and the selected tool's tip above them. Number keys pick a tool within the curre
 open the mannequin stops, poses, and the camera moves in for a close-up. The wardrobe has seven tabs:
 - **Look:** any skin, or a custom paint with your own body, joint and eye colours.
 - **Head:**
-  - Shape: Round, Square, Egg, Wide, Tin can.
+  - Shape: Round, Square, Egg, Wide, Tin can, Pear, Acorn, Long face, Hexagon, Pumpkin, Jawline, Alien.
   - Size: Small, Normal, Big, Huge. This one is a real physics change.
   - Eyes: Classic, Round, Big, Beady, Sleepy, Cyclops. They all still blink and follow you.
   - Nose: Pointy, Round, Button, Long, none.
   - Ears: none, Round, Elf, Big.
 - **Hair:**
-  - Styles: crew cut, mohawk, afro, spiky, ponytail, bowl cut, long, pigtails, bun, professor.
+  - Styles (22): crew cut, mohawk, afro, spiky, ponytail, bowl cut, long, pigtails, bun, professor,
+    pompadour, slicked back, curly, dreadlocks, braids, emo fringe, top knot, mullet, anime spikes,
+    bob, comb-over, flat top.
   - Beards: full, goatee, chin strap, sideburns, wizard.
   - A hair-colour palette.
 - **Body:** Build (Slim, Normal, Chunky, Buff, Round belly) and Feet (Tiny, Normal, Clown shoes).
