@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { RAPIER, toLocal, toWorld, bodyPos } from './physics.js';
 import { mat, mesh, geo } from './materials.js';
 import { HATS, FACES, OUTFITS, HEAD_SIZES } from './accessories.js';
-import { HEAD_SHAPES, EYES, NOSES, EARS, HAIR, BEARDS, BUILDS, FEET, buildScale } from './shapes.js';
+import { HEAD_SHAPES, EYES, NOSES, EARS, HAIR, BEARDS, BUILDS, FEET, buildScale, FINISHES, PATTERNS, JOINT_STYLES, EYE_COLORS, MARKINGS, TEMPERAMENTS, ENERGIES, WALKS, styleMaterial, buildMarkings } from './shapes.js';
 
 /* ------------------------------------------------------------------ */
 /* Body layout (metres, standing on y = 0, facing +z)                  */
@@ -159,6 +159,7 @@ function makePartMesh(name, def, skin, index) {
     if (child !== name) continue;
     const ball = mesh(geo(`ball${r}`, () => new THREE.IcosahedronGeometry(r, 1)), skin.joint);
     ball.userData.role = 'joint';
+    ball.userData.ball = r;
     ball.position.set(w[0] - def.pos[0], w[1] - def.pos[1], w[2] - def.pos[2]);
     g.add(ball);
   }
@@ -257,6 +258,15 @@ export class Mannequin {
       hairColor: 0x2b1d14,
       build: 'normal',
       feet: 'normal',
+      finish: 'satin',
+      pattern: 'none',
+      patternColor: 0x1c1c22,
+      jointStyle: 'balls',
+      eyeColor: null,
+      markings: 'none',
+      temperament: 'normal',
+      energy: 'normal',
+      walk: 'normal',
     };
   }
 
@@ -291,6 +301,15 @@ export class Mannequin {
       hairColor: num(saved.hairColor, def.hairColor),
       build: pick(saved.build, BUILDS, 'normal'),
       feet: pick(saved.feet, FEET, 'normal'),
+      finish: pick(saved.finish, FINISHES, 'satin'),
+      pattern: pick(saved.pattern, PATTERNS, 'none'),
+      patternColor: num(saved.patternColor, def.patternColor),
+      jointStyle: pick(saved.jointStyle, JOINT_STYLES, 'balls'),
+      eyeColor: EYE_COLORS.includes(saved.eyeColor) ? saved.eyeColor : null,
+      markings: pick(saved.markings, MARKINGS, 'none'),
+      temperament: pick(saved.temperament, TEMPERAMENTS, 'normal'),
+      energy: pick(saved.energy, ENERGIES, 'normal'),
+      walk: pick(saved.walk, WALKS, 'normal'),
     };
   }
 
@@ -327,6 +346,7 @@ export class Mannequin {
     this.look = { ...this.look, ...patch, paint: { ...this.look.paint, ...(patch.paint || {}) } };
     this.saveLook();
     if (patch.skin || patch.paint) this.setSkin(this.look.skin);
+    else this.restyle();
     if (this.look.head !== before) {
       this.reset();
       return;
@@ -356,6 +376,12 @@ export class Mannequin {
       hairColor: any([0x2b1d14, 0x5a3a22, 0xe8c27a, 0xc2552a, 0x9a9a9a, 0xf2f2f2, 0x2a8cff, 0xff6fb5, 0x3fd06a, 0x8b5cf6]),
       build: Math.random() < 0.4 ? 'normal' : any(keys(BUILDS)),
       feet: Math.random() < 0.7 ? 'normal' : any(keys(FEET)),
+      finish: Math.random() < 0.6 ? 'satin' : any(keys(FINISHES)),
+      pattern: Math.random() < 0.6 ? 'none' : any(keys(PATTERNS)),
+      patternColor: any(PALETTE),
+      jointStyle: Math.random() < 0.6 ? 'balls' : any(keys(JOINT_STYLES)),
+      eyeColor: Math.random() < 0.6 ? null : any(EYE_COLORS),
+      markings: Math.random() < 0.6 ? 'none' : any(keys(MARKINGS)),
     });
   }
 
@@ -365,6 +391,18 @@ export class Mannequin {
     if (!by) return;
     const look = this.look;
     const mainOf = (e) => e?.mesh?.children.find((c) => c.userData.main);
+    // Joint style.
+    const js = JOINT_STYLES[look.jointStyle] || JOINT_STYLES.balls;
+    for (const e of this.parts) {
+      e.mesh?.traverse((o) => {
+        const r = o.userData.ball;
+        if (!r) return;
+        if (!o.userData.ballGeo) o.userData.ballGeo = o.geometry;
+        o.visible = !js.hidden;
+        o.geometry = js.geo ? js.geo(r) : o.userData.ballGeo;
+        o.scale.setScalar(js.scale || 1);
+      });
+    }
     // Body build and feet.
     for (const e of this.parts) {
       const main = mainOf(e);
@@ -402,7 +440,7 @@ export class Mannequin {
       pupil.position.set(x, y, (style.sclera ? 0.11 : 0.104) + dz);
       pupil.userData.base = pupil.position.clone();
       if (style.lids && !hide) {
-        const lid = mesh(new THREE.BoxGeometry(0.062, 0.03, 0.012), this.skin.body(head.skinIndex), { cast: false });
+        const lid = mesh(new THREE.BoxGeometry(0.062, 0.03, 0.012), styleMaterial(this.skin.body(head.skinIndex), 'body', look), { cast: false });
         lid.userData.role = 'body';
         lid.userData.shapePart = true;
         lid.position.set(x, y + 0.015, 0.113 + dz);
@@ -417,11 +455,18 @@ export class Mannequin {
       if (ns.geo) nose.geometry = ns.geo();
       nose.position.set(0, -0.012, 0.12 + dz + (ns.z || 0));
     }
+    // Face markings.
+    if (look.markings !== 'none') {
+      for (const m of buildMarkings(look.markings, hs, look.headShape)) {
+        m.userData.shapePart = true;
+        head.mesh.add(m);
+      }
+    }
     // Ears (skin coloured, so they follow skins and tints).
     const es = EARS[look.ears];
     if (es?.geo) {
       for (const sgn of [-1, 1]) {
-        const ear = mesh(es.geo(), this.skin.body(head.skinIndex));
+        const ear = mesh(es.geo(), styleMaterial(this.skin.body(head.skinIndex), 'body', look));
         ear.userData.role = 'body';
         ear.userData.shapePart = true;
         if (es.elf) {
@@ -558,6 +603,7 @@ export class Mannequin {
       });
     }
     this.byName = byName;
+    this.restyle();
     this.reshape();
     this.dress();
     this.game.life?.onBuild();
@@ -582,15 +628,23 @@ export class Mannequin {
       this.look.skin = id;
       this.saveLook();
     }
+    this.restyle();
+    this.game.progress?.ev('skin', { id });
+  }
+
+  /** Apply skin colours plus the style (finish, pattern, glowing joints, eye colour) to every mesh. */
+  restyle() {
     const skin = this.skin;
+    const look = this.look;
+    const eyeMat = look.eyeColor != null ? mat(look.eyeColor, look.eyeColor === 0x00e5ff ? { emissive: 0x00e5ff, emissiveIntensity: 1.2 } : {}) : null;
     for (const e of this.parts) {
-      e.mesh.traverse((o) => {
+      e.mesh?.traverse((o) => {
         if (!o.isMesh) return;
         const role = o.userData.role;
         let m = null;
-        if (role === 'body') m = skin.body(e.skinIndex);
-        else if (role === 'joint') m = skin.joint;
-        else if (role === 'face') m = skin.face;
+        if (role === 'body') m = styleMaterial(skin.body(e.skinIndex), 'body', look);
+        else if (role === 'joint') m = styleMaterial(skin.joint, 'joint', look);
+        else if (role === 'face') m = eyeMat || skin.face;
         else if (role === 'sclera') m = skin.sclera;
         if (!m) return;
         // While tinted (frozen / charred), change what it reverts to instead.
@@ -598,7 +652,6 @@ export class Mannequin {
         else o.material = m;
       });
     }
-    this.game.progress?.ev('skin', { id });
   }
 
   /** Temporarily re-skin a piece (charred, frozen). Restores after `dur` seconds if given. */

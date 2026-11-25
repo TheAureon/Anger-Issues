@@ -252,3 +252,224 @@ export function buildScale(build, partName) {
 
 export { at as place };
 export { mesh };
+
+/* ------------------------------------------------------------------ */
+/* Style: surface finish, patterns, joints, eye colour, face markings  */
+/* ------------------------------------------------------------------ */
+
+export const FINISHES = {
+  matte: { name: 'Matte', icon: '🧱', roughness: 1, metalness: 0 },
+  satin: { name: 'Satin', icon: '🪵' }, // the skin's own finish
+  glossy: { name: 'Glossy', icon: '✨', roughness: 0.12, metalness: 0.05 },
+  metallic: { name: 'Metallic', icon: '🔩', roughness: 0.3, metalness: 0.55, sheen: 0.22 },
+  glow: { name: 'Glow', icon: '💡', glow: 0.55 },
+};
+
+export const PATTERNS = {
+  none: { name: 'None', icon: '🚫' },
+  stripes: { name: 'Stripes', icon: '🦓' },
+  spots: { name: 'Spots', icon: '🐆' },
+  camo: { name: 'Camo', icon: '🪖' },
+  checker: { name: 'Checker', icon: '🏁' },
+  zigzag: { name: 'Zigzag', icon: '⚡' },
+  stars: { name: 'Stars', icon: '⭐' },
+};
+
+export const JOINT_STYLES = {
+  balls: { name: 'Balls', icon: '⚪' },
+  big: { name: 'Big balls', icon: '🔵', scale: 1.45 },
+  cubes: { name: 'Cubes', icon: '🧊', geo: (r) => geo(`jc${r}`, () => new THREE.BoxGeometry(r * 1.6, r * 1.6, r * 1.6)) },
+  gems: { name: 'Gems', icon: '💎', geo: (r) => geo(`jg${r}`, () => new THREE.OctahedronGeometry(r * 1.25, 0)) },
+  glow: { name: 'Glowing', icon: '🔆' },
+  hidden: { name: 'Hidden', icon: '🫥', hidden: true },
+};
+
+export const EYE_COLORS = [null, 0x111111, 0x2a8cff, 0x3fd06a, 0xe8213a, 0x8b5cf6, 0xffc93c, 0xff6fb5, 0x00e5ff];
+
+export const MARKINGS = {
+  none: { name: 'None', icon: '🚫' },
+  freckles: { name: 'Freckles', icon: '🍪' },
+  blush: { name: 'Blush', icon: '😊' },
+  warpaint: { name: 'War paint', icon: '🪶' },
+  scar: { name: 'Scar', icon: '⚔️' },
+  stitches: { name: 'Stitches', icon: '🧵' },
+  clown: { name: 'Clown paint', icon: '🎪' },
+};
+
+export const TEMPERAMENTS = {
+  brave: { name: 'Brave', icon: '🦁' },
+  normal: { name: 'Normal', icon: '🙂' },
+  scaredy: { name: 'Scaredy-cat', icon: '🐱' },
+};
+export const ENERGIES = {
+  lazy: { name: 'Lazy', icon: '🦥' },
+  normal: { name: 'Normal', icon: '🚶' },
+  hyper: { name: 'Hyper', icon: '⚡' },
+};
+export const WALKS = {
+  normal: { name: 'Normal', icon: '🚶' },
+  robot: { name: 'Robot', icon: '🤖' },
+  sneaky: { name: 'Sneaky', icon: '🐾' },
+  swagger: { name: 'Swagger', icon: '😎' },
+  zombie: { name: 'Zombie', icon: '🧟' },
+};
+
+const css = (c) => '#' + (c & 0xffffff).toString(16).padStart(6, '0');
+const textures = new Map();
+
+/** Two-colour pattern texture (cached). */
+function patternTexture(kind, base, ink) {
+  const key = `${kind}_${base}_${ink}`;
+  let t = textures.get(key);
+  if (t) return t;
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const x = c.getContext('2d');
+  x.fillStyle = css(base);
+  x.fillRect(0, 0, 128, 128);
+  x.fillStyle = css(ink);
+  x.strokeStyle = css(ink);
+  // A fixed seed keeps the spots/camo identical between rebuilds.
+  let seed = 7;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  if (kind === 'stripes') {
+    for (let i = 0; i < 4; i++) x.fillRect(0, i * 32, 128, 13);
+  } else if (kind === 'spots') {
+    for (let i = 0; i < 14; i++) {
+      x.beginPath();
+      x.arc(rnd() * 128, rnd() * 128, 5 + rnd() * 8, 0, Math.PI * 2);
+      x.fill();
+    }
+  } else if (kind === 'camo') {
+    const tones = [ink, new THREE.Color(base).lerp(new THREE.Color(ink), 0.5).getHex(), new THREE.Color(base).multiplyScalar(0.6).getHex()];
+    for (let i = 0; i < 22; i++) {
+      x.fillStyle = css(tones[i % 3]);
+      x.beginPath();
+      const cx = rnd() * 128;
+      const cy = rnd() * 128;
+      for (let k = 0; k < 7; k++) {
+        const a = (k / 7) * Math.PI * 2;
+        const r = 8 + rnd() * 14;
+        k ? x.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r) : x.moveTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+      }
+      x.fill();
+    }
+  } else if (kind === 'checker') {
+    for (let i = 0; i < 4; i++) for (let k = 0; k < 4; k++) if ((i + k) % 2) x.fillRect(i * 32, k * 32, 32, 32);
+  } else if (kind === 'zigzag') {
+    x.lineWidth = 9;
+    for (let row = 0; row < 4; row++) {
+      x.beginPath();
+      for (let i = 0; i <= 8; i++) x.lineTo(i * 16, row * 32 + 8 + (i % 2) * 14);
+      x.stroke();
+    }
+  } else if (kind === 'stars') {
+    for (let i = 0; i < 10; i++) {
+      const cx = rnd() * 128;
+      const cy = rnd() * 128;
+      const r = 7 + rnd() * 5;
+      x.beginPath();
+      for (let k = 0; k < 10; k++) {
+        const a = (k / 10) * Math.PI * 2 - Math.PI / 2;
+        const rr = k % 2 ? r * 0.45 : r;
+        k ? x.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr) : x.moveTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
+      }
+      x.fill();
+    }
+  }
+  t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(2, 2);
+  textures.set(key, t);
+  return t;
+}
+
+const styled = new Map();
+
+/**
+ * The material a body/joint mesh should use for this style: skin colour with
+ * the chosen finish, pattern and joint glow. Cached so meshes share it.
+ */
+export function styleMaterial(base, role, look) {
+  const finish = FINISHES[look.finish] || FINISHES.satin;
+  const pattern = role === 'body' ? look.pattern || 'none' : 'none';
+  const glowJoint = role === 'joint' && look.jointStyle === 'glow';
+  if (finish === FINISHES.satin && pattern === 'none' && !glowJoint) return base;
+  const key = `${base.uuid}|${look.finish}|${pattern}|${look.patternColor}|${glowJoint}`;
+  let m = styled.get(key);
+  if (m) return m;
+  const color = base.color.getHex();
+  m = new THREE.MeshStandardMaterial({
+    color: pattern !== 'none' ? 0xffffff : color,
+    map: pattern !== 'none' ? patternTexture(pattern, color, look.patternColor ?? 0x1c1c22) : null,
+    flatShading: true,
+    roughness: finish.roughness ?? base.roughness,
+    metalness: finish.metalness ?? base.metalness,
+    emissive: base.emissive.clone(),
+    emissiveIntensity: base.emissiveIntensity,
+  });
+  if (finish.sheen) {
+    m.emissive.set(color).multiplyScalar(finish.sheen);
+    m.emissiveIntensity = 1;
+  }
+  if (finish.glow) {
+    m.emissive.set(color);
+    m.emissiveIntensity = finish.glow;
+    if (pattern !== 'none') m.emissiveMap = m.map;
+  }
+  if (glowJoint) {
+    m.emissive.set(color);
+    m.emissiveIntensity = 1.3;
+  }
+  styled.set(key, m);
+  return m;
+}
+
+/** Depth of the head's front surface at (x, y), so markings sit on it rather than float. */
+function surfaceZ(shapeId, hs, x, y) {
+  if (shapeId === 'square') return hs.front;
+  const fx = Math.min(0.98, Math.abs(x) / hs.side);
+  if (shapeId === 'can') return hs.front * Math.sqrt(1 - fx * fx);
+  const fy = Math.min(0.98, Math.abs(y) / hs.top);
+  return hs.front * Math.sqrt(Math.max(0.05, 1 - fx * fx - fy * fy));
+}
+
+/** Face markings, built in head space for a head of this shape. */
+export function buildMarkings(kind, hs, shapeId = 'round') {
+  const out = [];
+  const sx = hs.side / 0.108;
+  const put = (m, x, y, lift = 0.003, rz = 0) => {
+    const px = x * sx;
+    m.position.set(px, y, surfaceZ(shapeId, hs, px, y) + lift);
+    // Turn to follow the curve a little.
+    m.rotation.set(-y * 2.2, (px / hs.side) * 0.9, rz);
+    m.castShadow = false;
+    out.push(m);
+    return m;
+  };
+  const flat = (w, h, color, opts) => mesh(new THREE.PlaneGeometry(w, h), mat(color, { roughness: 1, ...opts }), { cast: false });
+  const dot = (r, color, opts) => mesh(new THREE.CircleGeometry(r, 8), mat(color, { roughness: 1, ...opts }), { cast: false });
+  if (kind === 'freckles') {
+    for (const [x, y] of [[0.033, -0.012], [0.047, -0.019], [0.058, -0.008], [0.04, -0.026], [-0.033, -0.012], [-0.047, -0.019], [-0.058, -0.008], [-0.04, -0.026]]) {
+      put(dot(0.0045, 0x7a4a26), x, y);
+    }
+  } else if (kind === 'blush') {
+    for (const s of [-1, 1]) put(dot(0.017, 0xff7fa0, { opacity: 0.8 }), s * 0.055, -0.022).scale.set(1.4, 0.8, 1);
+  } else if (kind === 'warpaint') {
+    for (const s of [-1, 1]) for (const y of [-0.016, -0.03]) put(flat(0.048, 0.007, 0x1a1a1a), s * 0.048, y, 0.003, s * 0.1);
+    put(flat(0.012, 0.045, 0xd62839), 0, 0.075);
+  } else if (kind === 'scar') {
+    put(flat(0.011, 0.085, 0x8a3b2e), 0.046, 0.03, 0.004, -0.35);
+    for (let i = 0; i < 4; i++) put(flat(0.022, 0.004, 0x5a2418), 0.033 + i * 0.009, 0.062 - i * 0.022, 0.005, -0.35);
+  } else if (kind === 'stitches') {
+    put(flat(0.2, 0.004, 0x222222), 0, 0.062);
+    for (let i = 0; i < 9; i++) put(flat(0.004, 0.02, 0x222222), -0.08 + i * 0.02, 0.062, 0.004);
+  } else if (kind === 'clown') {
+    for (const s of [-1, 1]) {
+      put(dot(0.034, 0xf8f6f2), s * 0.046, 0.024, 0.001);
+      put(flat(0.01, 0.034, 0x2a4fa8), s * 0.046, 0.074);
+    }
+  }
+  return out;
+}

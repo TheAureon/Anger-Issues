@@ -4,7 +4,7 @@ import { SKINS } from './mannequin.js';
 import { STIFFNESS } from './joints.js';
 import { GORE_MODES } from './gore.js';
 import { HATS, FACES, OUTFITS, HEAD_SIZES, PAINT } from './accessories.js';
-import { HEAD_SHAPES, EYES, NOSES, EARS, HAIR, BEARDS, HAIR_COLORS, BUILDS, FEET } from './shapes.js';
+import { HEAD_SHAPES, EYES, NOSES, EARS, HAIR, BEARDS, HAIR_COLORS, BUILDS, FEET, FINISHES, PATTERNS, JOINT_STYLES, EYE_COLORS, MARKINGS, TEMPERAMENTS, ENERGIES, WALKS } from './shapes.js';
 
 const NAMES = ['Gerald', 'Woody', 'Splinter', 'Kevin', 'Sir Oakley', 'Plank', 'Pinecone', 'Barry', 'Timber', 'Clive', 'Norbert', 'Knot', 'Dougie', 'Mr. Hinges', 'Twiggy', 'Steve'];
 
@@ -144,6 +144,8 @@ export class UI {
           <button data-tab="head">🙂<small>Head</small></button>
           <button data-tab="hair">💇<small>Hair</small></button>
           <button data-tab="body">💪<small>Body</small></button>
+          <button data-tab="style">🖌️<small>Style</small></button>
+          <button data-tab="mind">🧠<small>Mind</small></button>
           <button data-tab="wear">🎩<small>Wear</small></button>
         </nav>
         <div class="sheet-body">
@@ -159,6 +161,14 @@ export class UI {
           <section data-tab="hair"><h3>Beard</h3><div class="w-grid w-beard"></div></section>
           <section data-tab="body"><h3>Build</h3><div class="w-grid w-build"></div></section>
           <section data-tab="body"><h3>Feet</h3><div class="seg w-feet"></div></section>
+          <section data-tab="style"><h3>Finish</h3><div class="w-grid w-finish"></div></section>
+          <section data-tab="style"><h3>Pattern</h3><div class="w-grid w-pattern"></div><div class="swatches w-patcolor"></div></section>
+          <section data-tab="style"><h3>Joints</h3><div class="w-grid w-joints"></div></section>
+          <section data-tab="style"><h3>Eye colour</h3><div class="swatches w-eyecolor"></div></section>
+          <section data-tab="style"><h3>Face markings</h3><div class="w-grid w-markings"></div></section>
+          <section data-tab="mind"><h3>Temperament</h3><div class="seg w-temper"></div><p class="w-note">How easily it gets scared, and how long it stays rattled.</p></section>
+          <section data-tab="mind"><h3>Energy</h3><div class="seg w-energy"></div><p class="w-note">How fast it moves and how often it stops for a rest.</p></section>
+          <section data-tab="mind"><h3>Walk style</h3><div class="w-grid w-walk"></div><p class="w-note">How it strolls around when it isn't running for its life.</p></section>
           <section data-tab="wear"><h3>Hat</h3><div class="w-grid w-hat"></div></section>
           <section data-tab="wear"><h3>Face extras</h3><div class="w-grid w-face"></div></section>
           <section data-tab="wear"><h3>Outfit</h3><div class="w-grid w-outfit"></div></section>
@@ -372,6 +382,31 @@ export class UI {
     cards(W.querySelector('.w-beard'), BEARDS, look.beard, (id) => m.setLook({ beard: id }), 'room-card');
     cards(W.querySelector('.w-build'), BUILDS, look.build, (id) => m.setLook({ build: id }), 'room-card');
     cards(W.querySelector('.w-feet'), FEET, look.feet, (id) => m.setLook({ feet: id }), 'seg-btn');
+    cards(W.querySelector('.w-finish'), FINISHES, look.finish, (id) => m.setLook({ finish: id }), 'room-card');
+    cards(W.querySelector('.w-pattern'), PATTERNS, look.pattern, (id) => m.setLook({ pattern: id }), 'room-card');
+    cards(W.querySelector('.w-joints'), JOINT_STYLES, look.jointStyle, (id) => m.setLook({ jointStyle: id }), 'room-card');
+    cards(W.querySelector('.w-markings'), MARKINGS, look.markings, (id) => m.setLook({ markings: id }), 'room-card');
+    cards(W.querySelector('.w-temper'), TEMPERAMENTS, look.temperament, (id) => m.setLook({ temperament: id }), 'seg-btn');
+    cards(W.querySelector('.w-energy'), ENERGIES, look.energy, (id) => m.setLook({ energy: id }), 'seg-btn');
+    cards(W.querySelector('.w-walk'), WALKS, look.walk, (id) => m.setLook({ walk: id }), 'room-card');
+    const swatchRow = (box, colors, current, onPick, label) => {
+      box.innerHTML = '';
+      for (const c of colors) {
+        const b = el('button', 'swatch' + (current === c ? ' on' : '') + (c == null ? ' default' : ''));
+        if (c != null) b.style.background = '#' + c.toString(16).padStart(6, '0');
+        b.title = c == null ? 'Skin default' : label;
+        b.setAttribute('aria-label', c == null ? 'Skin default' : label);
+        b.onclick = () => {
+          game.sfx.click();
+          onPick(c);
+          this.renderWardrobe();
+        };
+        box.append(b);
+      }
+    };
+    swatchRow(W.querySelector('.w-patcolor'), PAINT, look.patternColor, (c) => m.setLook({ patternColor: c }), 'Pattern colour');
+    W.querySelector('.w-patcolor').classList.toggle('hidden', look.pattern === 'none');
+    swatchRow(W.querySelector('.w-eyecolor'), EYE_COLORS, look.eyeColor, (c) => m.setLook({ eyeColor: c }), 'Eye colour');
     const hc = W.querySelector('.w-haircolor');
     hc.innerHTML = '';
     for (const c of HAIR_COLORS) {

@@ -109,7 +109,7 @@ card. Tools sit in a dock at the bottom: category tabs, big tiles for the tools 
 and the selected tool's tip above them. Number keys pick a tool within the current category.
 
 **Customize it (👕 Wardrobe):** open it from the 👕 button in the top bar or from Settings. While it's
-open the mannequin stops, poses, and the camera moves in for a close-up. The wardrobe has five tabs:
+open the mannequin stops, poses, and the camera moves in for a close-up. The wardrobe has seven tabs:
 - **Look:** any skin, or a custom paint with your own body, joint and eye colours.
 - **Head:**
   - Shape: Round, Square, Egg, Wide, Tin can.
@@ -123,6 +123,16 @@ open the mannequin stops, poses, and the camera moves in for a close-up. The war
   - A hair-colour palette.
 - **Body:** Build (Slim, Normal, Chunky, Buff, Round belly) and Feet (Tiny, Normal, Clown shoes).
   These are visual only, so physics and balance stay the same, and outfits stretch to fit the build.
+- **Style:**
+  - Finish: Matte, Satin, Glossy, Metallic, Glow.
+  - Pattern: Stripes, Spots, Camo, Checker, Zigzag, Stars, in a colour you pick.
+  - Joints: Balls, Big balls, Cubes, Gems, Glowing, Hidden.
+  - Eye colour.
+  - Face markings: freckles, blush, war paint, scar, stitches, clown paint. Markings follow the head shape.
+- **Mind (personality):**
+  - Temperament: Brave, Normal, Scaredy-cat. It scales how frightened it gets and how fast it calms down.
+  - Energy: Lazy, Normal, Hyper. It sets walking speed and how often it stops to rest.
+  - Walk style: Normal, Robot, Sneaky, Swagger, Zombie. This is how it strolls when it isn't fleeing.
 - **Wear:** 23 hats, face extras and 17 outfits (see below).
 
 🎲 Randomize and ↺ Default are at the bottom. Hats, hair and glasses fit whichever head shape you

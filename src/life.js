@@ -30,6 +30,14 @@ const STAND_H = 1.0; // pelvis height when standing
 const WALK = 0.75;
 const RUN = 2.6;
 
+// Personality (set in the wardrobe's Mind tab).
+const TEMPERAMENT = { brave: 0.45, normal: 1, scaredy: 1.8 };
+const ENERGY = {
+  lazy: { speed: 0.55, idle: 0.75, idleLen: 2.2 },
+  normal: { speed: 1, idle: 0.45, idleLen: 1 },
+  hyper: { speed: 1.6, idle: 0.12, idleLen: 0.4 },
+};
+
 // Walkable area per room (square half-size or disc radius).
 const ARENA = { space: { r: 5.2 }, default: { half: 5.6 } };
 
@@ -86,6 +94,12 @@ export class Life {
     this.offsets.clear();
   }
 
+  /** Temperament multiplier on fear, energy settings and walk style from the look. */
+  get persona() {
+    const l = this.game.mannequin.look || {};
+    return { T: TEMPERAMENT[l.temperament] ?? 1, E: ENERGY[l.energy] || ENERGY.normal, walk: l.walk || 'normal' };
+  }
+
   get head() {
     const h = this.game.mannequin.byName?.head;
     return h?.alive ? h : null;
@@ -106,8 +120,9 @@ export class Life {
   onHurt(e, amount, point) {
     point = new THREE.Vector3(point.x, point.y, point.z);
     this.pain = Math.min(1.5, this.pain + amount * 1.3);
-    this.anxiety = Math.min(1, this.anxiety + amount * 0.6);
-    this.fear = Math.min(1, this.fear + amount * 0.8);
+    const T = this.persona.T;
+    this.anxiety = Math.min(1, this.anxiety + amount * 0.6 * T);
+    this.fear = Math.min(1, this.fear + amount * 0.8 * T);
     this.flinch = Math.max(this.flinch, 0.25 + amount * 0.4);
     this.happy = 0;
     this.lastHit = { point: point.clone(), at: this.game.time };
@@ -172,7 +187,7 @@ export class Life {
         }
       }
     }
-    this.fear = Math.min(1, this.fear + strength);
+    this.fear = Math.min(1, this.fear + strength * this.persona.T);
     this.threat = { kind: 'startle', pos: pos.clone(), urgency: strength };
   }
 
@@ -186,8 +201,10 @@ export class Life {
     this.steps++;
     this.stateT += dt;
     this.pain = Math.max(0, this.pain - dt * 0.25);
-    this.fear = Math.max(0, this.fear - dt * 0.35);
-    this.anxiety = Math.max(0, this.anxiety - dt * 0.02);
+    // Brave ones shake things off fast; scaredy-cats stay rattled.
+    const calm = 1 / Math.max(0.3, this.persona.T);
+    this.fear = Math.max(0, this.fear - dt * 0.35 * calm);
+    this.anxiety = Math.max(0, this.anxiety - dt * 0.02 * calm);
     this.dizzy = Math.max(0, this.dizzy - dt);
     this.flinch = Math.max(0, this.flinch - dt);
     this.happy = Math.max(0, this.happy - dt);
@@ -318,7 +335,7 @@ export class Life {
     const prev = this.threat;
     if (best && (!prev || prev.kind !== best.kind) && best.urgency > 0.5 && best.kind !== 'cursor') this.startle(best.pos, 0.3);
     this.threat = best;
-    if (best) this.fear = Math.max(this.fear, best.urgency * (best.kind === 'cursor' ? 0.5 : 1));
+    if (best) this.fear = Math.max(this.fear, Math.min(1, best.urgency * (best.kind === 'cursor' ? 0.5 : 1) * this.persona.T));
   }
 
   arenaClamp(p) {
@@ -387,10 +404,10 @@ export class Life {
     // Calm-ish: wander between spots, pause and look around. Anxiety keeps it far from the camera.
     if (this.mode !== 'wander' && this.mode !== 'idle') this.target = null;
     if (!this.target || now > this.targetAt || pos.distanceTo(this.target) < 0.35) {
-      if (this.mode === 'wander' && Math.random() < 0.45) {
+      if (this.mode === 'wander' && Math.random() < this.persona.E.idle) {
         this.mode = 'idle';
         this.target = pos.clone();
-        this.targetAt = now + 1.5 + Math.random() * 3;
+        this.targetAt = now + (1.5 + Math.random() * 3) * this.persona.E.idleLen;
       } else {
         this.mode = 'wander';
         const cam = game.camera.position;
@@ -424,7 +441,8 @@ export class Life {
       const dist = dir.length();
       if (dist > 0.2) {
         dir.divideScalar(dist);
-        const base = this.mode === 'flee' ? RUN : this.mode === 'backoff' ? 0.9 : WALK * (1 - this.anxiety * 0.3);
+        const E = this.persona.E;
+        const base = this.mode === 'flee' ? RUN * (0.8 + 0.2 * E.speed) : this.mode === 'backoff' ? 0.9 * E.speed : WALK * E.speed * (1 - this.anxiety * 0.3) * (this.persona.walk === 'sneaky' ? 0.7 : 1);
         speed = base * Math.min(1, dist / 0.8) * (1 - b.limp * 0.55);
       }
     }
@@ -454,7 +472,7 @@ export class Life {
     // Support strength ramps up while getting up.
     const s = this.state === 'rising' ? clamp(this.stateT / 0.9, 0, 1) : 1;
     const g = -this.game.physics.gravityY;
-    const crouch = (this.mode === 'cower' ? 0.3 : 0) + (this.mode === 'freeze' ? 0.08 : 0) + (this.state === 'rising' ? 0.25 * (1 - s) : 0);
+    const crouch = (this.persona.walk === 'sneaky' && this.speed > 0.1 && this.mode === 'wander' ? 0.13 : 0) + (this.mode === 'cower' ? 0.3 : 0) + (this.mode === 'freeze' ? 0.08 : 0) + (this.state === 'rising' ? 0.25 * (1 - s) : 0);
     const bob = this.speed > 0.1 ? Math.abs(Math.sin(this.phase)) * 0.03 * Math.min(1, this.speed) : 0;
     const H = STAND_H - crouch + bob - b.limp * 0.04;
 
@@ -623,6 +641,41 @@ export class Life {
       sym('elbow', -1.2, 0, 0, run);
       add('waist', 0.15 * run, A * 0.12 * Math.sin(ph), 0); // lean into the run, counter-twist
       if (this.mode === 'backoff') add('waist', -0.12, 0, 0); // leaning back, away from the danger
+      // Walk styles (only for a relaxed wander; fleeing is always a plain sprint).
+      const style = this.mode === 'wander' ? this.persona.walk : 'normal';
+      const sw = clamp(this.speed / 0.5, 0, 1);
+      if (style === 'robot') {
+        // Stiff legs, stomping steps, forearms out front, no arm swing.
+        add('kneeL', -A * 1.1 * Math.max(0, -Math.cos(ph)), 0, 0);
+        add('kneeR', -A * 1.1 * Math.max(0, Math.cos(ph)), 0, 0);
+        add('shoulderL', -A * 0.7 * Math.sin(ph), 0, 0);
+        add('shoulderR', A * 0.7 * Math.sin(ph), 0, 0);
+        sym('elbow', -1.3, 0, 0, sw);
+        add('neck', 0, 0.25 * Math.sign(Math.sin(t * 0.8)), 0, sw);
+      } else if (style === 'sneaky') {
+        // Tiptoe: crouched, hands up like paws, small careful steps.
+        sym('shoulder', -0.9, 0, -0.1, sw);
+        sym('elbow', -1.7, 0, 0, sw);
+        sym('wrist', 0.8, 0, 0, sw);
+        add('waist', 0.28, 0, 0, sw);
+        sym('knee', 0.35, 0, 0, sw);
+      } else if (style === 'swagger') {
+        // Big arm swing, shoulders rolling, leaning back.
+        add('shoulderL', A * 0.9 * Math.sin(ph), 0, 0.25, sw);
+        add('shoulderR', -A * 0.9 * Math.sin(ph), 0, -0.25, sw);
+        add('waist', -0.1, A * 0.25 * Math.sin(ph), 0.06 * Math.sin(ph), sw);
+        add('neck', -0.1, -A * 0.15 * Math.sin(ph), 0, sw);
+      } else if (style === 'zombie') {
+        // Arms out front, dragging one leg, head lolling.
+        add('shoulderL', -A * 0.7 * Math.sin(ph), 0, 0);
+        add('shoulderR', A * 0.7 * Math.sin(ph), 0, 0);
+        sym('shoulder', -1.45, 0, 0.05, sw);
+        sym('elbow', -0.15, 0, 0, sw);
+        add('kneeL', -A * 1.2 * Math.max(0, -Math.cos(ph)), 0, 0);
+        add('hipL', A * 0.4 * Math.sin(ph), 0, 0);
+        add('neck', 0.25, 0, 0.3 + 0.1 * Math.sin(t * 1.3), sw);
+        add('waist', 0.12, 0, 0, sw);
+      }
     }
 
     // Getting up: start from a crouch and straighten.
