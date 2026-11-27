@@ -3,9 +3,8 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// Usage: node scripts/make-playable.mjs <project folder> <output file>, both relative to the repo root.
-//   node scripts/make-playable.mjs . anger-issues.html
-//   node scripts/make-playable.mjs chess-shooter index.html
+// Usage: node scripts/make-playable.mjs [project folder] [output file], both relative to the repo root
+// (defaults: the repo root and index.html).
 const repo = join(dirname(fileURLToPath(import.meta.url)), '..');
 const root = join(repo, process.argv[2] || '.');
 const out = process.argv[3] || 'index.html';
